@@ -183,6 +183,9 @@ export class AudioManager {
         this._buffers.set('player_death',    this._genPlayerDeath(sr));
         this._buffers.set('low_health',      this._genLowHealth(sr));
 
+        // -- Misc --
+        this._buffers.set('empty_click',     this._genEmptyClick(sr));
+
         // -- Level --
         this._buffers.set('level_complete',  this._genLevelComplete(sr));
     }
@@ -814,6 +817,25 @@ export class AudioManager {
 
         // Overall fade-out at the end
         this._applyFadeOut(data, Math.floor(len * 0.75), len);
+        this._clampBuffer(data);
+
+        return buf;
+    }
+
+    /**
+     * Empty weapon click - short dry click for out-of-ammo feedback.
+     * @private
+     */
+    _genEmptyClick(sr) {
+        const dur = 0.06;
+        const buf = this._createBuffer(sr, dur);
+        const data = buf.getChannelData(0);
+        const len = data.length;
+
+        // Short metallic click
+        this._square(data, sr, 0, Math.floor(len * 0.3), 1200, 0.3);
+        this._whiteNoise(data, 0, Math.floor(len * 0.2), 0.15);
+        this._applyFadeOut(data, Math.floor(len * 0.1), len);
         this._clampBuffer(data);
 
         return buf;

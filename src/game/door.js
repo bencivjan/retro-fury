@@ -86,7 +86,7 @@ export class Door {
      *
      * @param {number} dt - Delta time in seconds.
      */
-    update(dt) {
+    update(dt, playerPos) {
         switch (this.state) {
             case DoorState.OPENING:
                 this._timer += dt;
@@ -103,8 +103,15 @@ export class Door {
                 this._timer += dt;
 
                 if (this._timer >= STAY_OPEN_DURATION) {
-                    this.state = DoorState.CLOSING;
-                    this._timer = 0;
+                    // Don't close if the player is standing in the doorway.
+                    if (playerPos &&
+                        Math.floor(playerPos.x) === this.x &&
+                        Math.floor(playerPos.y) === this.y) {
+                        this._timer = STAY_OPEN_DURATION; // hold open
+                    } else {
+                        this.state = DoorState.CLOSING;
+                        this._timer = 0;
+                    }
                 }
                 break;
 

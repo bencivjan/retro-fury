@@ -8,6 +8,7 @@
 // =============================================================================
 
 import { MAX_HEALTH, MAX_ARMOR, MAX_AMMO } from './player.js';
+import { WEAPON_DEFS } from './weapon.js';
 
 // -----------------------------------------------------------------------------
 // Item Type Enum
@@ -279,7 +280,8 @@ export class Item {
             player.currentWeapon = def.weaponIndex;
 
             this.active = false;
-            return { picked: true, message: `Got weapon!` };
+            const wName = WEAPON_DEFS[def.weaponIndex] ? WEAPON_DEFS[def.weaponIndex].name : 'weapon';
+            return { picked: true, message: `Got ${wName}!` };
         }
 
         // ---- Keycard pickups ----

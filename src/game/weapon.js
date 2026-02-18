@@ -295,7 +295,7 @@ export class WeaponSystem {
         // ---- Ammo check ----
         if (def.ammoPerShot > 0) {
             if (player.ammo[def.ammoType] < def.ammoPerShot) {
-                return null; // Not enough ammo.
+                return { empty: true }; // Not enough ammo.
             }
             player.ammo[def.ammoType] -= def.ammoPerShot;
         }

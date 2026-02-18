@@ -384,7 +384,7 @@ function loadLevel(index) {
 function restartLevel() {
     // On death, restart fresh (no persistent state carried).
     if (currentLevelIndex === 0) {
-        persistWeapons   = [true, false, false, false, false];
+        persistWeapons   = [true, false, false, false, false, false, false];
         persistAmmo      = { bullets: Infinity, shells: 0, rockets: 0, cells: 0 };
         persistWeaponIdx = 0;
     }
@@ -704,7 +704,9 @@ function updatePlaying(dt) {
     const fireResult = weaponSystem.update(dt, input, player, enemies, map);
 
     // 6. Handle weapon fire results.
-    if (fireResult) {
+    if (fireResult && fireResult.empty) {
+        audio.play('empty_click');
+    } else if (fireResult) {
         // Play weapon fire sound.
         const soundName = WEAPON_SOUNDS[weaponSystem.currentWeapon];
         if (soundName) audio.play(soundName);
@@ -795,7 +797,7 @@ function updatePlaying(dt) {
 
     // 10. Update all doors.
     for (const door of doors) {
-        door.update(dt);
+        door.update(dt, player.pos);
     }
 
     // 11. Update items (bob animation) and auto-pickup.
@@ -923,6 +925,7 @@ function handleInteractions() {
                     }
                 } else if (result.message) {
                     hud.showPickupMessage(result.message);
+                    audio.play('empty_click');
                 }
             }
         }
@@ -1584,7 +1587,7 @@ function gameLoop(timestamp) {
             } else {
                 renderPlaying(dt);
             }
-            menuSystem.renderPause(bufferCtx);
+            menuSystem.renderPause(bufferCtx, { isMultiplayer: mpMap !== null });
             updatePaused();
             break;
         case GameState.DEATH:
@@ -1659,7 +1662,7 @@ function updateTitle(dt) {
                 totalTime  = 0;
                 totalShots = 0;
                 totalHits  = 0;
-                persistWeapons   = [true, false, false, false, false];
+                persistWeapons   = [true, false, false, false, false, false, false];
                 persistAmmo      = { bullets: Infinity, shells: 0, rockets: 0, cells: 0 };
                 persistWeaponIdx = 0;
 

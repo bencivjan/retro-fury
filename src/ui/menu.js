@@ -109,7 +109,7 @@ export class MenuSystem {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText('WASD - MOVE  |  MOUSE - AIM  |  CLICK - FIRE  |  E - INTERACT', cx, controlsY);
-        ctx.fillText('1-5 - WEAPONS  |  M - MAP  |  TAB - OBJECTIVES  |  ESC - PAUSE', cx, controlsY + 12);
+        ctx.fillText('1-7 - WEAPONS  |  M - MAP  |  TAB - OBJECTIVES  |  ESC - PAUSE', cx, controlsY + 12);
 
         // -- Blinking prompt --
         if (this._isBlinkOn()) {
@@ -132,7 +132,7 @@ export class MenuSystem {
      *
      * @param {CanvasRenderingContext2D} ctx
      */
-    renderPause(ctx) {
+    renderPause(ctx, { isMultiplayer = false } = {}) {
         ctx.save();
 
         // -- Semi-transparent dark overlay --
@@ -159,8 +159,10 @@ export class MenuSystem {
         ctx.fillStyle = '#AAAAAA';
         ctx.textBaseline = 'top';
         ctx.fillText('ESC - RESUME', cx, cy + 15);
-        ctx.fillText('R - RESTART LEVEL', cx, cy + 30);
-        ctx.fillText('Q - QUIT TO TITLE', cx, cy + 45);
+        if (!isMultiplayer) {
+            ctx.fillText('R - RESTART LEVEL', cx, cy + 30);
+        }
+        ctx.fillText('Q - QUIT TO TITLE', cx, cy + (isMultiplayer ? 30 : 45));
 
         // -- Scanlines --
         this._renderScanlines(ctx);
