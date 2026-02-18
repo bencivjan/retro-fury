@@ -1690,8 +1690,10 @@ function updateLevelIntro(dt) {
         levelNumber: currentLevelIndex + 1,
     }, introCharIndex);
 
-    // Press Enter to begin (only after text is fully revealed).
-    if (introCharIndex >= briefingLen && wasKeyJustPressed('Enter')) {
+    // Press Enter to skip typewriter or begin (after text is fully revealed).
+    if (wasKeyJustPressed('Enter') && introCharIndex < briefingLen) {
+        introCharIndex = briefingLen; // Skip to full text.
+    } else if (introCharIndex >= briefingLen && wasKeyJustPressed('Enter')) {
         prevPlayerHealth = player ? player.health : 100;
         gameState = GameState.PLAYING;
 
@@ -1740,7 +1742,7 @@ function updatePaused() {
 function updateDeath(dt) {
     menuSystem.renderDeath(bufferCtx, deathStats);
 
-    if (wasKeyJustPressed('Enter')) {
+    if (wasKeyJustPressed('Enter') || wasKeyJustPressed('KeyR')) {
         restartLevel();
         prevPlayerHealth = player ? player.health : 100;
         gameState = GameState.PLAYING;

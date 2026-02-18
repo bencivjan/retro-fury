@@ -116,22 +116,44 @@ export class Renderer {
         const p  = this.pixels32;
         const mid = (h >> 1) + horizonOffset;
 
-        const ceilColor  = this._cssToPackedColor(palette.ceiling);
-        const floorColor = this._cssToPackedColor(palette.floor);
+        // Parse base colors into components for gradient blending.
+        const ceilRGB  = this._cssToRGB(palette.ceiling);
+        const floorRGB = this._cssToRGB(palette.floor);
 
         // Clamp mid to valid range.
         const clampedMid = mid < 0 ? 0 : (mid > h ? h : mid);
+        const halfH = h >> 1;
 
-        // Top half: ceiling
-        const ceilEnd = clampedMid * w;
-        for (let i = 0; i < ceilEnd; i++) {
-            p[i] = ceilColor;
+        // Top half: ceiling - darkens toward the top (farther away).
+        for (let y = 0; y < clampedMid; y++) {
+            const distFromHorizon = clampedMid - y;
+            const shade = Math.max(0.25, 1.0 - (distFromHorizon / halfH) * 0.65);
+            const color = this._packColor(
+                (ceilRGB.r * shade) | 0,
+                (ceilRGB.g * shade) | 0,
+                (ceilRGB.b * shade) | 0,
+                255
+            );
+            const rowStart = y * w;
+            for (let x = 0; x < w; x++) {
+                p[rowStart + x] = color;
+            }
         }
 
-        // Bottom half: floor
-        const totalPixels = w * h;
-        for (let i = ceilEnd; i < totalPixels; i++) {
-            p[i] = floorColor;
+        // Bottom half: floor - darkens toward the bottom (farther away).
+        for (let y = clampedMid; y < h; y++) {
+            const distFromHorizon = y - clampedMid;
+            const shade = Math.max(0.25, 1.0 - (distFromHorizon / halfH) * 0.65);
+            const color = this._packColor(
+                (floorRGB.r * shade) | 0,
+                (floorRGB.g * shade) | 0,
+                (floorRGB.b * shade) | 0,
+                255
+            );
+            const rowStart = y * w;
+            for (let x = 0; x < w; x++) {
+                p[rowStart + x] = color;
+            }
         }
     }
 
@@ -317,5 +339,25 @@ export class Renderer {
         }
 
         return this._packColor(r, g, b, a);
+    }
+
+    /**
+     * Parse a CSS hex color string and return an {r, g, b} object.
+     *
+     * @param {string} css - CSS hex color string.
+     * @returns {{ r: number, g: number, b: number }}
+     * @private
+     */
+    _cssToRGB(css) {
+        let hex = css.replace('#', '');
+        if (hex.length === 3) {
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        }
+        const val = parseInt(hex, 16);
+        return {
+            r: (val >>> 16) & 0xFF,
+            g: (val >>> 8) & 0xFF,
+            b: val & 0xFF,
+        };
     }
 }

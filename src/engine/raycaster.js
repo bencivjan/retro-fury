@@ -125,8 +125,11 @@ export class Raycaster {
             // ---- DDA walk ----
             let hit  = 0;
             let side = 0; // 0 = NS wall (stepped in X), 1 = EW wall (stepped in Y)
+            const maxSteps = mapWidth + mapHeight;
+            let steps = 0;
 
-            while (hit === 0) {
+            while (hit === 0 && steps < maxSteps) {
+                steps++;
                 // Advance to the next grid boundary (whichever is closer).
                 if (sideDistX < sideDistY) {
                     sideDistX += deltaDistX;

@@ -722,6 +722,15 @@ function generateArmor() {
     return img;
 }
 
+/** 3x5 pixel-art font bitmaps for ammo box labels. Each letter is an array
+ *  of 5 rows, where each row is a 3-bit bitmask (MSB=left pixel). */
+const _MINI_FONT = {
+    B: [0b111, 0b101, 0b110, 0b101, 0b111],
+    S: [0b111, 0b100, 0b111, 0b001, 0b111],
+    R: [0b111, 0b101, 0b111, 0b110, 0b101],
+    C: [0b111, 0b100, 0b100, 0b100, 0b111],
+};
+
 /** Generate an ammo box with given color. */
 function generateAmmoBox(r, g, b, label) {
     const img = createImageData(TEX, TEX);
@@ -729,6 +738,23 @@ function generateAmmoBox(r, g, b, label) {
     strokeRect(img, 20, 32, 24, 20, (r * 0.6) | 0, (g * 0.6) | 0, (b * 0.6) | 0);
     // Highlight on top
     hLine(img, 21, 42, 33, Math.min(r + 50, 255), Math.min(g + 50, 255), Math.min(b + 50, 255));
+    // Draw label letter centered in the box (2x scale = 6x10 pixels)
+    const glyph = _MINI_FONT[label];
+    if (glyph) {
+        const scale = 2;
+        const lx = 29; // center horizontally: 20 + (24 - 6) / 2
+        const ly = 37; // center vertically:   32 + (20 - 10) / 2
+        const dr = Math.max(0, (r * 0.3) | 0);
+        const dg = Math.max(0, (g * 0.3) | 0);
+        const db = Math.max(0, (b * 0.3) | 0);
+        for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 3; col++) {
+                if (glyph[row] & (1 << (2 - col))) {
+                    fillRect(img, lx + col * scale, ly + row * scale, scale, scale, dr, dg, db);
+                }
+            }
+        }
+    }
     return img;
 }
 

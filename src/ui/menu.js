@@ -111,6 +111,15 @@ export class MenuSystem {
         ctx.fillText('WASD - MOVE  |  MOUSE - AIM  |  CLICK - FIRE  |  E - INTERACT', cx, controlsY);
         ctx.fillText('1-5 - WEAPONS  |  M - MAP  |  TAB - OBJECTIVES  |  ESC - PAUSE', cx, controlsY + 12);
 
+        // -- Blinking prompt --
+        if (this._isBlinkOn()) {
+            ctx.font = `bold 9px ${FONT_FAMILY}`;
+            ctx.fillStyle = '#FF6622';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('PRESS ENTER', cx, controlsY + 30);
+        }
+
         // -- Scanlines and CRT effects --
         this._renderScanlines(ctx);
         this._renderVignette(ctx);
@@ -220,7 +229,7 @@ export class MenuSystem {
             ctx.fillStyle = '#FF4444';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText('PRESS ENTER TO RETRY', cx, cy + 50);
+            ctx.fillText('PRESS ENTER OR R TO RETRY', cx, cy + 50);
         }
 
         // -- Scanlines --
