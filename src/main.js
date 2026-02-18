@@ -76,7 +76,7 @@ const EXIT_RANGE = 1.0;
 const PLANT_HOLD_TIME = 2.0;
 
 /** Weapon fire sound names keyed by weapon index. */
-const WEAPON_SOUNDS = ['pistol_fire', 'shotgun_fire', 'machinegun_fire', 'rocket_fire', 'plasma_fire'];
+const WEAPON_SOUNDS = ['pistol_fire', 'shotgun_fire', 'machinegun_fire', 'rocket_fire', 'plasma_fire', 'sniper_fire', 'knife_swing'];
 
 // =============================================================================
 // Game States
@@ -209,7 +209,7 @@ let totalShots = 0;
 let totalHits  = 0;
 
 // -- Persistent player state between levels --
-let persistWeapons    = [true, false, false, false, false];
+let persistWeapons    = [true, false, false, false, false, false, false];
 let persistAmmo       = { bullets: Infinity, shells: 0, rockets: 0, cells: 0 };
 let persistWeaponIdx  = 0;
 
@@ -448,16 +448,24 @@ function checkObjectives() {
                 break;
 
             case 'rescue':
-                // Completed when the player reaches the rescue location and presses E.
-                if (dist < INTERACT_RANGE && wasKeyJustPressed('KeyE')) {
-                    objectiveSystem.completeObjective(i);
-                    audio.play('objective_complete');
-                    hud.showPickupMessage('PRISONER RESCUED!');
+                // Completed when the player picks up the objective item at
+                // the rescue location (auto-pickup on proximity) or presses E.
+                {
+                    const rescueItem = items.find(it =>
+                        it.type === ItemType.OBJECTIVE_ITEM && !it.active &&
+                        Math.abs(it.x - obj.x) < 1.5 && Math.abs(it.y - obj.y) < 1.5
+                    );
+                    if (rescueItem || (dist < INTERACT_RANGE && wasKeyJustPressed('KeyE'))) {
+                        objectiveSystem.completeObjective(i);
+                        audio.play('objective_complete');
+                        hud.showPickupMessage('PRISONER RESCUED!');
+                    }
                 }
                 break;
 
             case 'plant':
                 // Requires holding E for PLANT_HOLD_TIME seconds at the location.
+                // Deactivate objective item at location to prevent misleading pickup message.
                 if (dist < INTERACT_RANGE) {
                     if (input.isKeyDown('KeyE')) {
                         if (plantTargetIndex !== i) {
@@ -478,6 +486,13 @@ function checkObjectives() {
                             plantTimer = 0;
                             plantTargetIndex = -1;
                             isPlanting = false;
+                            // Deactivate the objective item at this location.
+                            for (const it of items) {
+                                if (it.type === ItemType.OBJECTIVE_ITEM && it.active &&
+                                    Math.abs(it.x - obj.x) < 1.5 && Math.abs(it.y - obj.y) < 1.5) {
+                                    it.active = false;
+                                }
+                            }
                         }
                     } else {
                         if (plantTargetIndex === i) {
@@ -1024,20 +1039,39 @@ function setupNetworkHandlers() {
                 lobbyScreen.opponentJoined();
                 break;
 
+            case 'player_ready':
+                if (msg.playerId !== mpState.localPlayerId) {
+                    lobbyScreen.opponentReady();
+                }
+                break;
+
             case 'game_start':
                 onMultiplayerGameStart(msg);
                 break;
 
             case 'state':
                 mpState.applyServerState(msg);
-                // Also update local player position from server state.
+                // Reconcile local player with server state using interpolation
+                // to avoid jarring snaps while still staying authoritative.
                 if (msg.players && player) {
                     for (const p of msg.players) {
                         if (p.id === mpState.localPlayerId) {
-                            // Server-authoritative position reconciliation.
-                            player.pos.x = p.x;
-                            player.pos.y = p.y;
-                            player.angle = p.angle;
+                            // Lerp toward server position for smooth correction.
+                            const dx = p.x - player.pos.x;
+                            const dy = p.y - player.pos.y;
+                            const distSq = dx * dx + dy * dy;
+                            // If too far off (>2 tiles), snap immediately.
+                            if (distSq > 4) {
+                                player.pos.x = p.x;
+                                player.pos.y = p.y;
+                                player.angle = p.angle;
+                            } else {
+                                // Blend toward server position.
+                                const blend = 0.3;
+                                player.pos.x += dx * blend;
+                                player.pos.y += dy * blend;
+                                player.angle = p.angle;
+                            }
                             player.health = p.health;
                             player.alive = p.alive;
                         }
@@ -1146,9 +1180,9 @@ function onMultiplayerGameStart(msg) {
 
     mpState.initMatch(localId, remoteId);
 
-    // Set up the arena map.
+    // Set up the arena map (deep copy to prevent mutation of module data).
     mpMap = {
-        grid: arena.map,
+        grid: arena.map.map(row => [...row]),
         width: arena.map[0].length,
         height: arena.map.length,
     };
@@ -1220,6 +1254,12 @@ function updateMultiplayer(dt) {
         dt,
     });
 
+    // Client-side prediction: apply local movement immediately for responsive feel.
+    // The server will reconcile position, but local movement gives 60fps feedback.
+    if (player && player.alive && mpMap) {
+        player.update(dt, mpMap, input);
+    }
+
     // Update weapon system animation (fire animation, bob) for visual feedback.
     // Hit detection is server-side, so we pass empty enemies to skip local damage.
     const mpFireResult = weaponSystem.update(dt, input, player, [], mpMap || { grid: [], width: 0, height: 0 });
@@ -1235,7 +1275,7 @@ function updateMultiplayer(dt) {
     killFeed.update(dt);
     scoreboard.setTiers(mpState.localTier, mpState.remoteTier);
 
-    // Sync camera to player position (server-reconciled).
+    // Sync camera to player position (locally predicted).
     if (player && player.alive) {
         syncCamera();
     }
@@ -1480,7 +1520,7 @@ function updateMpVictory(dt) {
     }
 
     // Blinking prompt.
-    if ((menuSystem._elapsed % 1.0) < 0.6) {
+    if (menuSystem.isBlinkOn()) {
         bufferCtx.font = 'bold 10px "Courier New", Courier, monospace';
         bufferCtx.fillStyle = won ? '#FFD700' : '#FF4444';
         bufferCtx.textAlign = 'center';

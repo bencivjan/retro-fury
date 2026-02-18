@@ -259,7 +259,7 @@ export class LevelLoader {
             throw new Error('LevelLoader: level data must have a "playerStart" with x and y.');
         }
 
-        if (!data.exitTrigger || typeof data.exitTrigger.x !== 'number') {
+        if (!data.exitTrigger || typeof data.exitTrigger.x !== 'number' || typeof data.exitTrigger.y !== 'number') {
             throw new Error('LevelLoader: level data must have an "exitTrigger" with x and y.');
         }
     }

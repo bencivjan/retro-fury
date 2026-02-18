@@ -109,7 +109,7 @@ export const WEAPON_DEFS = [
         name:        'Sniper Rifle',
         damage:      100,
         fireRate:    0.8,
-        ammoType:    'sniper',
+        ammoType:    'bullets',
         ammoPerShot: 0,       // Infinite ammo.
         spread:      0,
         isProjectile: false,
@@ -120,8 +120,8 @@ export const WEAPON_DEFS = [
         name:        'Knife',
         damage:      200,
         fireRate:    2,
-        ammoType:    'none',
-        ammoPerShot: 0,       // Infinite ammo.
+        ammoType:    'bullets',
+        ammoPerShot: 0,       // Infinite ammo (melee).
         spread:      0,
         isProjectile: false,
         spriteId:    306,

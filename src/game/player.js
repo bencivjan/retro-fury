@@ -79,12 +79,13 @@ export class Player {
         };
 
         /**
-         * @type {boolean[]} Which weapons the player has (indexed 0-4).
-         * 0=Pistol, 1=Shotgun, 2=MachineGun, 3=RocketLauncher, 4=PlasmaRifle
+         * @type {boolean[]} Which weapons the player has (indexed 0-6).
+         * 0=Pistol, 1=Shotgun, 2=MachineGun, 3=RocketLauncher, 4=PlasmaRifle,
+         * 5=SniperRifle (MP), 6=Knife (MP)
          */
-        this.weapons = [true, false, false, false, false];
+        this.weapons = [true, false, false, false, false, false, false];
 
-        /** @type {number} Index of the currently selected weapon (0-4). */
+        /** @type {number} Index of the currently selected weapon (0-6). */
         this.currentWeapon = DEFAULT_STATE.currentWeapon;
 
         /** @type {Set<string>} Set of keycard colors the player holds. */
@@ -289,10 +290,10 @@ export class Player {
     /**
      * Give the player a weapon by index.
      *
-     * @param {number} index - Weapon index (0-4).
+     * @param {number} index - Weapon index (0-6).
      */
     giveWeapon(index) {
-        if (index >= 0 && index < this.weapons.length) {
+        if (index >= 0 && index < 7) {
             this.weapons[index] = true;
         }
     }
@@ -320,7 +321,7 @@ export class Player {
             cells:   0,
         };
 
-        this.weapons = [true, false, false, false, false];
+        this.weapons = [true, false, false, false, false, false, false];
         this.currentWeapon = DEFAULT_STATE.currentWeapon;
         this.keycards.clear();
         this.pitch = 0;

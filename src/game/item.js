@@ -292,7 +292,7 @@ export class Item {
         // ---- Objective item ----
         if (this.type === ItemType.OBJECTIVE_ITEM) {
             this.active = false;
-            return { picked: true, message: 'Objective acquired!' };
+            return { picked: true, message: '' };
         }
 
         return { picked: false, message: '' };

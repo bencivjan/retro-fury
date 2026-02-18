@@ -31,6 +31,9 @@ export const ROOM_CREATED = 'room_created';
 /** Server notifies that a new player has joined the room. */
 export const PLAYER_JOINED = 'player_joined';
 
+/** Server notifies that a player has readied up. */
+export const PLAYER_READY = 'player_ready';
+
 /** Server signals both players are ready and the match is starting. */
 export const GAME_START = 'game_start';
 
@@ -69,6 +72,7 @@ const VALID_TYPES = new Set([
     // Server → Client
     ROOM_CREATED,
     PLAYER_JOINED,
+    PLAYER_READY,
     GAME_START,
     STATE,
     HIT,

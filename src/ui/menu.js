@@ -463,4 +463,13 @@ export class MenuSystem {
     _isBlinkOn() {
         return (this._elapsed % BLINK_INTERVAL) < (BLINK_INTERVAL * 0.6);
     }
+
+    /**
+     * Public blink state accessor for external UI elements.
+     *
+     * @returns {boolean}
+     */
+    isBlinkOn() {
+        return this._isBlinkOn();
+    }
 }

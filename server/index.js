@@ -19,6 +19,7 @@ import {
     INPUT,
     ROOM_CREATED,
     PLAYER_JOINED,
+    PLAYER_READY,
     GAME_START,
     ERROR,
 } from './protocol.js';
@@ -209,6 +210,12 @@ function handleReady(ws, playerId) {
 
     player.ready = true;
     console.log(`[Server] Player ${playerId} is ready in room ${room.roomCode}`);
+
+    // Broadcast ready status to the opponent.
+    room.broadcast({
+        type: PLAYER_READY,
+        playerId,
+    });
 
     // Check if all players are ready and the room is still in waiting state.
     if (!room.isFull()) return;
