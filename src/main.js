@@ -1036,14 +1036,30 @@ function setupNetworkHandlers() {
         switch (msg.type) {
             case 'room_created':
                 lobbyScreen.setRoomCode(msg.roomCode);
+                if (msg.playerId !== undefined && msg.playerId !== null) {
+                    mpState.localPlayerId = msg.playerId;
+                }
                 break;
 
             case 'player_joined':
+                // Joiner receives their own playerId in this message.
+                // Host already learns theirs from room_created.
+                if (
+                    mpState.localPlayerId === null &&
+                    lobbyScreen.roomCode === '' &&
+                    msg.playerId !== undefined &&
+                    msg.playerId !== null
+                ) {
+                    mpState.localPlayerId = msg.playerId;
+                }
                 lobbyScreen.opponentJoined();
                 break;
 
             case 'player_ready':
-                if (msg.playerId !== mpState.localPlayerId) {
+                if (
+                    mpState.localPlayerId !== null &&
+                    msg.playerId !== mpState.localPlayerId
+                ) {
                     lobbyScreen.opponentReady();
                 }
                 break;
@@ -1226,11 +1242,6 @@ function onMultiplayerGameStart(msg) {
     syncCamera();
     prevPlayerHealth = player.health;
 
-    // Request pointer lock.
-    if (displayCanvas && !input.isPointerLocked()) {
-        displayCanvas.requestPointerLock();
-    }
-
     gameState = GameState.MP_PLAYING;
 }
 
@@ -1369,6 +1380,17 @@ function renderMultiplayer(dt) {
         bufferCtx.textAlign = 'center';
         bufferCtx.textBaseline = 'middle';
         bufferCtx.fillText(`PROMOTED: ${mpState.promotionWeaponName}`, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 20);
+        bufferCtx.restore();
+    }
+
+    // Prompt users to click so the browser can grant pointer lock.
+    if (!input.isPointerLocked()) {
+        bufferCtx.save();
+        bufferCtx.font = 'bold 14px "Courier New"';
+        bufferCtx.fillStyle = '#FFCC00';
+        bufferCtx.textAlign = 'center';
+        bufferCtx.textBaseline = 'middle';
+        bufferCtx.fillText('CLICK TO PLAY', SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
         bufferCtx.restore();
     }
 }

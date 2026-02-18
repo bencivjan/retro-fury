@@ -155,6 +155,7 @@ function handleCreateRoom(ws, playerId) {
         ws.send(serialize({
             type: ROOM_CREATED,
             roomCode: room.roomCode,
+            playerId,
         }));
     } catch (err) {
         sendError(ws, err.message);
