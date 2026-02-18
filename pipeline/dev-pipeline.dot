@@ -1,0 +1,235 @@
+// RETRO FURY - Development Pipeline
+// Orchestrates the plan -> breakdown -> implement -> QA workflow
+// using Attractor's AI pipeline engine.
+
+digraph RetroFuryDev {
+    graph [
+        goal="Build a retro-style FPS game with 5 levels, multiple enemy types, and engaging gameplay using JavaScript and HTML5 Canvas raycasting",
+        label="Retro Fury Development Pipeline",
+        model_stylesheet="
+            * { llm_model: claude-sonnet-4-5; llm_provider: anthropic; }
+            .planning { llm_model: claude-opus-4-6; llm_provider: anthropic; reasoning_effort: high; }
+            .implementation { llm_model: o4-mini; llm_provider: openai; }
+            .review { llm_model: claude-opus-4-6; llm_provider: anthropic; reasoning_effort: high; }
+        ",
+        default_max_retry=3,
+        retry_target=fix_issues
+    ]
+
+    rankdir=TB
+    node [timeout="900s"]
+
+    // Entry and exit
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Ship It"]
+
+    // ============================================================
+    // PHASE 1: PLANNING (Claude)
+    // ============================================================
+
+    high_level_plan [
+        label="Create High-Level Game Plan",
+        prompt="Create a comprehensive game design plan for a retro-style FPS game called RETRO FURY. Include: technology choices (JS + HTML5 Canvas raycasting), 5 level designs with themes and objectives, enemy types with stats, weapon progression, file structure, and core architecture. Output as GAME_PLAN.md.",
+        class="planning",
+        goal_gate=true
+    ]
+
+    // ============================================================
+    // PHASE 2: TASK BREAKDOWN (Claude)
+    // ============================================================
+
+    task_breakdown [
+        label="Break Down Into Implementation Tasks",
+        prompt="Read GAME_PLAN.md and break it into detailed, atomic implementation tasks. Each task should be a single-commit-sized unit of work. Group tasks into phases: (1) Core Engine, (2) Game Systems, (3) Content & Levels, (4) UI & Polish. Output as TASKS.md with no code snippets - only descriptions of what to build, inputs/outputs, and acceptance criteria.",
+        class="planning",
+        goal_gate=true
+    ]
+
+    // ============================================================
+    // PHASE 3: IMPLEMENTATION (Codex)
+    // ============================================================
+
+    // --- Core Engine (parallel) ---
+    impl_core [shape=component, label="Implement Core Engine", max_parallel="3"]
+
+    impl_raycaster [
+        label="Implement Raycasting Engine",
+        prompt="Implement the DDA raycasting engine in src/engine/raycaster.js. Include: ray casting loop, wall hit detection, textured wall rendering, distance-based shading, floor/ceiling solid color rendering. Reference GAME_PLAN.md for architecture. Use 320x200 base resolution. Export a Raycaster class.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    impl_renderer [
+        label="Implement Renderer & Camera",
+        prompt="Implement src/engine/renderer.js (canvas orchestrator that composites walls, sprites, HUD layers) and src/engine/camera.js (player camera with position, direction, FOV, view plane calculations). Reference GAME_PLAN.md.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    impl_sprites [
+        label="Implement Sprite System",
+        prompt="Implement src/engine/sprite.js. Include: billboarded sprite rendering, depth sorting relative to walls, sprite sheet animation support, distance-based scaling. Sprites must render correctly within the raycasting pipeline.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    core_fan_in [shape=tripleoctagon, label="Core Engine Complete"]
+
+    // --- Game Systems (parallel) ---
+    impl_game [shape=component, label="Implement Game Systems", max_parallel="4"]
+
+    impl_player [
+        label="Implement Player System",
+        prompt="Implement src/game/player.js. Include: WASD movement with collision detection, mouse look, health/armor/ammo state, weapon inventory, interaction system (E key for doors and objectives). Also implement src/utils/input.js for keyboard + mouse + pointer lock.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    impl_weapons [
+        label="Implement Weapon System",
+        prompt="Implement src/game/weapon.js and src/game/projectile.js. Include: 5 weapons (Pistol, Shotgun, Machine Gun, Rocket Launcher, Plasma Rifle) with fire rates, damage, ammo types. Weapon switching with 1-5 keys. Weapon bob animation. Hitscan for bullets, projectile entities for rockets. Muzzle flash.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    impl_enemies [
+        label="Implement Enemy System",
+        prompt="Implement src/game/enemy.js (base class with state machine) and all enemy types in src/game/enemies/ (grunt.js, soldier.js, scout.js, brute.js, commander.js). Each type has unique HP, speed, weapon, and behavior as defined in GAME_PLAN.md. Also implement src/ai/state-machine.js, src/ai/pathfinding.js (simple tile-based), and src/ai/behaviors.js.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    impl_items [
+        label="Implement Items & Doors",
+        prompt="Implement src/game/item.js (health packs, armor, ammo, keycards, weapon pickups, objective items with bob animation and glow) and src/game/door.js (sliding doors, locked doors requiring keycards, interaction trigger).",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    game_fan_in [shape=tripleoctagon, label="Game Systems Complete"]
+
+    // --- Content & Levels (sequential, depends on game systems) ---
+    impl_textures [
+        label="Implement Procedural Textures",
+        prompt="Implement src/utils/textures.js. Generate all textures procedurally using canvas: brick walls, metal walls, lab walls, prison walls, tech walls, doors, floor patterns, item sprites, enemy sprites (front-facing, animated frames for walk/attack/pain/death), weapon sprites (idle, fire frames). All pixel-art style at 64x64 or 128x128. Also implement src/utils/math.js for vector/angle utilities.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    impl_audio [
+        label="Implement Audio System",
+        prompt="Implement src/audio/audio.js using Web Audio API. Generate retro sound effects procedurally with oscillators and noise: weapon fire sounds (per weapon), enemy sounds (alert, pain, death), door open, item pickup, objective complete, player hurt, ambient drone. Include volume control and spatial audio approximation (left/right panning based on enemy position).",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    impl_levels [
+        label="Implement All 5 Levels",
+        prompt="Implement src/levels/level-loader.js and all 5 level files (level1.js through level5.js). Each level exports: map (2D tile array, minimum 32x32), enemy spawns, item placements, objective definitions, exit trigger, intro text, and par time. Follow GAME_PLAN.md exactly for themes and objectives. Make maps interesting with varied layouts, secrets, and tactical spaces.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    // --- UI & Integration ---
+    impl_ui [
+        label="Implement UI Systems",
+        prompt="Implement all UI modules: src/ui/hud.js (health bar, armor, ammo, weapon display, crosshair, damage flash), src/ui/minimap.js (togglable minimap with fog of war), src/ui/menu.js (title screen, pause menu, death screen with retro styling), src/ui/objectives.js (objective text, hint system, counters), src/ui/transitions.js (level intro briefing, stats screen between levels, victory screen).",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    impl_main [
+        label="Implement Main Game Loop & Integration",
+        prompt="Implement src/main.js (game initialization, requestAnimationFrame loop, state management for menu/gameplay/pause/death/transition states, level progression logic) and index.html + css/style.css (fullscreen canvas, retro font, minimal CSS). Wire all modules together. Ensure the game is fully playable from start to finish across all 5 levels.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    // ============================================================
+    // PHASE 4: QA REVIEW (Claude)
+    // ============================================================
+
+    qa_review [
+        label="QA Code Review",
+        prompt="Review ALL source files in the fps-game project. Check for: (1) Code quality and correctness, (2) Game balance issues, (3) Missing features from GAME_PLAN.md, (4) Performance concerns in the rendering loop, (5) Browser compatibility issues, (6) Fun factor - are levels engaging? Are enemies challenging but fair? (7) Are objectives clear with good hint systems? Output a detailed review with specific issues and suggested fixes.",
+        class="review",
+        goal_gate=true,
+        timeout="1800s"
+    ]
+
+    // Decision point
+    qa_check [shape=diamond, label="QA Passed?"]
+
+    // Fix loop
+    fix_issues [
+        label="Fix QA Issues",
+        prompt="Read the QA review output and fix all identified issues. Address code bugs, missing features, balance problems, and any other concerns raised. Test that fixes don't introduce regressions.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    // Human review gate
+    human_review [
+        shape=hexagon,
+        label="Human Playtest Review",
+        human.default_choice="approve"
+    ]
+
+    // Final polish
+    final_polish [
+        label="Final Polish Pass",
+        prompt="Perform a final polish pass on the game: ensure consistent retro aesthetic across all levels, tune enemy spawn counts for difficulty curve, verify all 5 levels are completable, add any missing sound effects, ensure HUD is readable, and optimize render loop performance. Make the game feel polished and fun.",
+        class="implementation",
+        timeout="1800s"
+    ]
+
+    // ============================================================
+    // PIPELINE FLOW
+    // ============================================================
+
+    // Phase 1: Planning
+    start -> high_level_plan
+    high_level_plan -> task_breakdown
+
+    // Phase 3: Core Engine (parallel)
+    task_breakdown -> impl_core
+    impl_core -> impl_raycaster
+    impl_core -> impl_renderer
+    impl_core -> impl_sprites
+    impl_raycaster -> core_fan_in
+    impl_renderer -> core_fan_in
+    impl_sprites -> core_fan_in
+
+    // Phase 3: Game Systems (parallel, after core)
+    core_fan_in -> impl_game
+    impl_game -> impl_player
+    impl_game -> impl_weapons
+    impl_game -> impl_enemies
+    impl_game -> impl_items
+    impl_player -> game_fan_in
+    impl_weapons -> game_fan_in
+    impl_enemies -> game_fan_in
+    impl_items -> game_fan_in
+
+    // Phase 3: Content (sequential after game systems)
+    game_fan_in -> impl_textures
+    impl_textures -> impl_audio
+    impl_audio -> impl_levels
+    impl_levels -> impl_ui
+    impl_ui -> impl_main
+
+    // Phase 4: QA
+    impl_main -> qa_review
+    qa_review -> qa_check
+
+    qa_check -> human_review [label="Pass", condition="outcome=success"]
+    qa_check -> fix_issues [label="Fail", condition="outcome!=success"]
+    fix_issues -> qa_review
+
+    // Human gate
+    human_review -> final_polish [label="[A] Approve"]
+    human_review -> fix_issues [label="[F] Fix Issues"]
+    human_review -> exit [label="[S] Ship As-Is"]
+
+    final_polish -> exit
+}
