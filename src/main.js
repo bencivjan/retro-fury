@@ -1070,29 +1070,24 @@ function setupNetworkHandlers() {
 
             case 'state':
                 mpState.applyServerState(msg);
-                // Reconcile local player with server state using interpolation
-                // to avoid jarring snaps while still staying authoritative.
+                // Store server correction targets for smooth per-frame interpolation.
+                // Applied in updateMultiplayer() each frame instead of all at once here.
                 if (msg.players && player) {
                     for (const p of msg.players) {
                         if (p.id === mpState.localPlayerId) {
-                            // Lerp toward server position for smooth correction.
                             const dx = p.x - player.pos.x;
                             const dy = p.y - player.pos.y;
                             const distSq = dx * dx + dy * dy;
-                            // If too far off (>2 tiles), snap immediately.
+                            // Teleport correction for large desync (>2 tiles).
                             if (distSq > 4) {
                                 player.pos.x = p.x;
                                 player.pos.y = p.y;
-                            } else {
-                                // Blend toward server position.
-                                const blend = 0.3;
-                                player.pos.x += dx * blend;
-                                player.pos.y += dy * blend;
+                                player.angle = p.angle;
                             }
-                            // Note: angle is NOT reconciled from server. The
-                            // client owns rotation via client-side prediction
-                            // to avoid jitter caused by the 20-tps server
-                            // overwriting the 60-fps local mouse-look.
+                            _mpServerX = p.x;
+                            _mpServerY = p.y;
+                            _mpServerAngle = p.angle;
+                            _mpHasServerTarget = true;
                             player.health = p.health;
                             player.alive = p.alive;
                         }
@@ -1248,6 +1243,12 @@ function onMultiplayerGameStart(msg) {
 }
 
 // =============================================================================
+// Multiplayer: Server reconciliation targets (smoothed per-frame)
+// =============================================================================
+let _mpServerX = 0, _mpServerY = 0, _mpServerAngle = 0;
+let _mpHasServerTarget = false;
+
+// =============================================================================
 // Multiplayer: Update - MP_PLAYING State
 // =============================================================================
 
@@ -1288,12 +1289,24 @@ function updateMultiplayer(dt) {
         }
     }
 
+    // Smooth server reconciliation: interpolate toward server targets each frame.
+    if (_mpHasServerTarget && player && player.alive) {
+        const lerpFactor = Math.min(1.0, 8.0 * dt); // converge over ~125ms
+        player.pos.x += (_mpServerX - player.pos.x) * lerpFactor;
+        player.pos.y += (_mpServerY - player.pos.y) * lerpFactor;
+        // Shortest-arc angle lerp to avoid spinning through 360.
+        let aDiff = _mpServerAngle - player.angle;
+        while (aDiff > Math.PI) aDiff -= 2 * Math.PI;
+        while (aDiff < -Math.PI) aDiff += 2 * Math.PI;
+        player.angle += aDiff * lerpFactor;
+    }
+
     // Update multiplayer state (timers, remote player interpolation).
     mpState.update(dt);
     killFeed.update(dt);
     scoreboard.setTiers(mpState.localTier, mpState.remoteTier);
 
-    // Sync camera to player position (locally predicted).
+    // Sync camera to player position (locally predicted + smoothed).
     if (player && player.alive) {
         syncCamera();
     }
