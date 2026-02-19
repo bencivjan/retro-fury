@@ -1082,20 +1082,28 @@ function setupNetworkHandlers() {
                                 player.angle = p.angle;
                                 _visualOffsetX = 0;
                                 _visualOffsetY = 0;
+                                _visualAngleOffset = 0;
                             } else {
-                                // Record pre-correction position for visual smoothing.
+                                // Record pre-correction state for visual smoothing.
                                 const oldX = player.pos.x;
                                 const oldY = player.pos.y;
+                                const oldAngle = player.angle;
                                 const blend = 0.3;
                                 player.pos.x += dx * blend;
                                 player.pos.y += dy * blend;
-                                // Visual offset = where we WERE minus where we ARE now.
-                                // This makes the camera "lag behind" the correction,
-                                // then decay to zero over the next few frames.
+                                // Visual offset = old pos minus new pos.
                                 _visualOffsetX += (oldX - player.pos.x);
                                 _visualOffsetY += (oldY - player.pos.y);
                             }
-                            player.angle = p.angle;
+                            // Snap angle for hitscan, but record visual offset.
+                            {
+                                const oldAngle = player.angle;
+                                player.angle = p.angle;
+                                let aDiff = oldAngle - player.angle;
+                                while (aDiff > Math.PI) aDiff -= 2 * Math.PI;
+                                while (aDiff < -Math.PI) aDiff += 2 * Math.PI;
+                                _visualAngleOffset += aDiff;
+                            }
                             player.health = p.health;
                             player.alive = p.alive;
                         }
@@ -1250,10 +1258,9 @@ function onMultiplayerGameStart(msg) {
     gameState = GameState.MP_PLAYING;
 }
 
-// Visual offset for smooth camera during server reconciliation.
-// Decays to zero each frame so the camera smoothly catches up to the
-// actual (corrected) player position.
-let _visualOffsetX = 0, _visualOffsetY = 0;
+// Visual offsets for smooth camera during server reconciliation.
+// Decays to zero each frame so the camera smoothly catches up.
+let _visualOffsetX = 0, _visualOffsetY = 0, _visualAngleOffset = 0;
 
 // =============================================================================
 // Multiplayer: Update - MP_PLAYING State
@@ -1296,10 +1303,11 @@ function updateMultiplayer(dt) {
         }
     }
 
-    // Decay visual offset so camera smoothly catches up to actual position.
-    const decay = Math.min(1.0, 12.0 * dt);
+    // Decay visual offsets so camera smoothly catches up.
+    const decay = Math.min(1.0, 8.0 * dt);
     _visualOffsetX *= (1 - decay);
     _visualOffsetY *= (1 - decay);
+    _visualAngleOffset *= (1 - decay);
 
     // Update multiplayer state (timers, remote player interpolation).
     mpState.update(dt);
@@ -1308,8 +1316,9 @@ function updateMultiplayer(dt) {
 
     // Sync camera to player position + visual offset (smoothed).
     if (player && player.alive) {
-        const cos = Math.cos(player.angle);
-        const sin = Math.sin(player.angle);
+        const smoothAngle = player.angle + _visualAngleOffset;
+        const cos = Math.cos(smoothAngle);
+        const sin = Math.sin(smoothAngle);
         camera.pos.x   = player.pos.x + _visualOffsetX;
         camera.pos.y   = player.pos.y + _visualOffsetY;
         camera.dir.x   = cos;
