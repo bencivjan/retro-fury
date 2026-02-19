@@ -1291,14 +1291,15 @@ function updateMultiplayer(dt) {
 
     // Smooth server reconciliation: interpolate toward server targets each frame.
     if (_mpHasServerTarget && player && player.alive) {
-        const lerpFactor = Math.min(1.0, 8.0 * dt); // converge over ~125ms
-        player.pos.x += (_mpServerX - player.pos.x) * lerpFactor;
-        player.pos.y += (_mpServerY - player.pos.y) * lerpFactor;
-        // Shortest-arc angle lerp to avoid spinning through 360.
+        const posLerp = Math.min(1.0, 10.0 * dt); // position: converge over ~100ms
+        player.pos.x += (_mpServerX - player.pos.x) * posLerp;
+        player.pos.y += (_mpServerY - player.pos.y) * posLerp;
+        // Angle converges faster (small corrections from our own input echoed back).
+        const angLerp = Math.min(1.0, 20.0 * dt); // angle: converge over ~50ms
         let aDiff = _mpServerAngle - player.angle;
         while (aDiff > Math.PI) aDiff -= 2 * Math.PI;
         while (aDiff < -Math.PI) aDiff += 2 * Math.PI;
-        player.angle += aDiff * lerpFactor;
+        player.angle += aDiff * angLerp;
     }
 
     // Update multiplayer state (timers, remote player interpolation).
