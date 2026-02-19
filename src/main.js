@@ -1082,12 +1082,10 @@ function setupNetworkHandlers() {
                                 player.angle = p.angle;
                                 _visualOffsetX = 0;
                                 _visualOffsetY = 0;
-                                _visualAngleOffset = 0;
                             } else {
                                 // Record pre-correction state for visual smoothing.
                                 const oldX = player.pos.x;
                                 const oldY = player.pos.y;
-                                const oldAngle = player.angle;
                                 const blend = 0.3;
                                 player.pos.x += dx * blend;
                                 player.pos.y += dy * blend;
@@ -1095,14 +1093,18 @@ function setupNetworkHandlers() {
                                 _visualOffsetX += (oldX - player.pos.x);
                                 _visualOffsetY += (oldY - player.pos.y);
                             }
-                            // Snap angle for hitscan, but record visual offset.
+                            // Angle: only snap for large desyncs (teleport/respawn).
+                            // For small differences, trust client prediction since both
+                            // client and server apply identical mouseDX * sensitivity.
                             {
-                                const oldAngle = player.angle;
-                                player.angle = p.angle;
-                                let aDiff = oldAngle - player.angle;
-                                while (aDiff > Math.PI) aDiff -= 2 * Math.PI;
-                                while (aDiff < -Math.PI) aDiff += 2 * Math.PI;
-                                _visualAngleOffset += aDiff;
+                                let serverAngle = p.angle % (2 * Math.PI);
+                                if (serverAngle < 0) serverAngle += 2 * Math.PI;
+                                let aDiff = serverAngle - player.angle;
+                                if (aDiff > Math.PI) aDiff -= 2 * Math.PI;
+                                if (aDiff < -Math.PI) aDiff += 2 * Math.PI;
+                                if (Math.abs(aDiff) > Math.PI / 4) {
+                                    player.angle = serverAngle;
+                                }
                             }
                             player.health = p.health;
                             player.alive = p.alive;
@@ -1260,7 +1262,7 @@ function onMultiplayerGameStart(msg) {
 
 // Visual offsets for smooth camera during server reconciliation.
 // Decays to zero each frame so the camera smoothly catches up.
-let _visualOffsetX = 0, _visualOffsetY = 0, _visualAngleOffset = 0;
+let _visualOffsetX = 0, _visualOffsetY = 0;
 
 // =============================================================================
 // Multiplayer: Update - MP_PLAYING State
@@ -1303,22 +1305,20 @@ function updateMultiplayer(dt) {
         }
     }
 
-    // Decay visual offsets so camera smoothly catches up.
+    // Decay visual position offsets so camera smoothly catches up.
     const decay = Math.min(1.0, 8.0 * dt);
     _visualOffsetX *= (1 - decay);
     _visualOffsetY *= (1 - decay);
-    _visualAngleOffset *= (1 - decay);
 
     // Update multiplayer state (timers, remote player interpolation).
     mpState.update(dt);
     killFeed.update(dt);
     scoreboard.setTiers(mpState.localTier, mpState.remoteTier);
 
-    // Sync camera to player position + visual offset (smoothed).
+    // Sync camera to player position (with visual offset) and angle.
     if (player && player.alive) {
-        const smoothAngle = player.angle + _visualAngleOffset;
-        const cos = Math.cos(smoothAngle);
-        const sin = Math.sin(smoothAngle);
+        const cos = Math.cos(player.angle);
+        const sin = Math.sin(player.angle);
         camera.pos.x   = player.pos.x + _visualOffsetX;
         camera.pos.y   = player.pos.y + _visualOffsetY;
         camera.dir.x   = cos;
@@ -1610,6 +1610,11 @@ function gameLoop(timestamp) {
         if (dt > 1 / 30) dt = 1 / 30;
         if (dt <= 0) dt = 0.016;
 
+        // Bot hook: runs BEFORE the game reads input, AFTER captureKeyState/input.update
+        if (window.__BOT_TICK) {
+            window.__BOT_TICK(dt, gameState, GameState);
+        }
+
         // Ensure audio is initialized on first user interaction.
         if (!audio.initialized && (input.isKeyDown('Enter') || input.isMouseDown() || input.isPointerLocked())) {
             audio.init();
@@ -1862,3 +1867,26 @@ function updateVictory(dt) {
 // =============================================================================
 
 requestAnimationFrame(gameLoop);
+
+// =============================================================================
+// AGENT INSTRUMENTATION (auto-play bot support)
+// =============================================================================
+window.__GAME_INTERNALS = {
+    get gameState() { return gameState; },
+    set gameState(v) { gameState = v; },
+    get currentLevelIndex() { return currentLevelIndex; },
+    get player() { return player; },
+    get enemies() { return enemies; },
+    get items() { return items; },
+    get doors() { return doors; },
+    get map() { return map; },
+    get levelData() { return levelData; },
+    get objectiveSystem() { return objectiveSystem; },
+    get levelTime() { return levelTime; },
+    get levelKills() { return levelKills; },
+    get totalKills() { return totalKills; },
+    get totalTime() { return totalTime; },
+    GameState,
+    restartLevel,
+};
+window.__INPUT = input;
