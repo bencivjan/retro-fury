@@ -1070,8 +1070,9 @@ function setupNetworkHandlers() {
 
             case 'state':
                 mpState.applyServerState(msg);
-                // Store server correction targets for smooth per-frame interpolation.
-                // Applied in updateMultiplayer() each frame instead of all at once here.
+                // Position: store server targets for smooth per-frame interpolation
+                // in updateMultiplayer(). Angle: snap immediately to stay synced with
+                // server (required for server-side hitscan accuracy).
                 if (msg.players && player) {
                     for (const p of msg.players) {
                         if (p.id === mpState.localPlayerId) {
@@ -1082,12 +1083,12 @@ function setupNetworkHandlers() {
                             if (distSq > 4) {
                                 player.pos.x = p.x;
                                 player.pos.y = p.y;
-                                player.angle = p.angle;
                             }
                             _mpServerX = p.x;
                             _mpServerY = p.y;
-                            _mpServerAngle = p.angle;
                             _mpHasServerTarget = true;
+                            // Angle snap keeps client/server in sync for hitscan.
+                            player.angle = p.angle;
                             player.health = p.health;
                             player.alive = p.alive;
                         }
@@ -1245,7 +1246,7 @@ function onMultiplayerGameStart(msg) {
 // =============================================================================
 // Multiplayer: Server reconciliation targets (smoothed per-frame)
 // =============================================================================
-let _mpServerX = 0, _mpServerY = 0, _mpServerAngle = 0;
+let _mpServerX = 0, _mpServerY = 0;
 let _mpHasServerTarget = false;
 
 // =============================================================================
@@ -1289,10 +1290,8 @@ function updateMultiplayer(dt) {
         }
     }
 
-    // Smooth server reconciliation: interpolate position toward server each frame.
-    // Angle is NOT reconciled here — both client and server apply the same mouseDX
-    // input, so they naturally stay in sync. Lerping angle fights with local aiming
-    // because the server echo is always ~50ms behind, creating persistent aim drag.
+    // Smooth position reconciliation: interpolate toward server each frame.
+    // Angle is snapped in the state handler (required for hitscan accuracy).
     if (_mpHasServerTarget && player && player.alive) {
         const posLerp = Math.min(1.0, 10.0 * dt); // converge over ~100ms
         player.pos.x += (_mpServerX - player.pos.x) * posLerp;
