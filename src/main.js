@@ -1289,17 +1289,14 @@ function updateMultiplayer(dt) {
         }
     }
 
-    // Smooth server reconciliation: interpolate toward server targets each frame.
+    // Smooth server reconciliation: interpolate position toward server each frame.
+    // Angle is NOT reconciled here — both client and server apply the same mouseDX
+    // input, so they naturally stay in sync. Lerping angle fights with local aiming
+    // because the server echo is always ~50ms behind, creating persistent aim drag.
     if (_mpHasServerTarget && player && player.alive) {
-        const posLerp = Math.min(1.0, 10.0 * dt); // position: converge over ~100ms
+        const posLerp = Math.min(1.0, 10.0 * dt); // converge over ~100ms
         player.pos.x += (_mpServerX - player.pos.x) * posLerp;
         player.pos.y += (_mpServerY - player.pos.y) * posLerp;
-        // Angle converges faster (small corrections from our own input echoed back).
-        const angLerp = Math.min(1.0, 20.0 * dt); // angle: converge over ~50ms
-        let aDiff = _mpServerAngle - player.angle;
-        while (aDiff > Math.PI) aDiff -= 2 * Math.PI;
-        while (aDiff < -Math.PI) aDiff += 2 * Math.PI;
-        player.angle += aDiff * angLerp;
     }
 
     // Update multiplayer state (timers, remote player interpolation).
