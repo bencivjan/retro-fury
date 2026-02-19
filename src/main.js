@@ -1127,7 +1127,7 @@ function setupNetworkHandlers() {
                     audio.play('enemy_death');
                     // Weapon promotion.
                     const newTier = msg.killerNewTier;
-                    if (newTier !== undefined && newTier > prevLocalTier) {
+                    if (newTier !== undefined && newTier > prevLocalTier && player) {
                         const weaponIdx = GUN_GAME_TIERS[newTier];
                         player.weapons = Array(7).fill(false);
                         player.weapons[weaponIdx] = true;
@@ -1147,7 +1147,7 @@ function setupNetworkHandlers() {
             }
 
             case 'respawn':
-                if (msg.playerId === mpState.localPlayerId) {
+                if (msg.playerId === mpState.localPlayerId && player) {
                     // Local player respawned.
                     player.pos.x = msg.x;
                     player.pos.y = msg.y;
@@ -1278,12 +1278,14 @@ function updateMultiplayer(dt) {
 
     // Update weapon system animation (fire animation, bob) for visual feedback.
     // Hit detection is server-side, so we pass empty enemies to skip local damage.
-    const mpFireResult = weaponSystem.update(dt, input, player, [], mpMap || { grid: [], width: 0, height: 0 });
-    if (mpFireResult) {
-        // Play weapon fire sound locally.
-        const mpSoundMap = { 0: 'pistol_fire', 1: 'shotgun_fire', 2: 'machinegun_fire', 5: 'sniper_fire', 6: 'knife_swing' };
-        const soundName = mpSoundMap[weaponSystem.currentWeapon];
-        if (soundName) audio.play(soundName);
+    if (player && mpMap) {
+        const mpFireResult = weaponSystem.update(dt, input, player, [], mpMap);
+        if (mpFireResult) {
+            // Play weapon fire sound locally.
+            const mpSoundMap = { 0: 'pistol_fire', 1: 'shotgun_fire', 2: 'machinegun_fire', 5: 'sniper_fire', 6: 'knife_swing' };
+            const soundName = mpSoundMap[weaponSystem.currentWeapon];
+            if (soundName) audio.play(soundName);
+        }
     }
 
     // Update multiplayer state (timers, remote player interpolation).
@@ -1572,91 +1574,95 @@ function updateMpVictory(dt) {
 let lastTimestamp = 0;
 
 function gameLoop(timestamp) {
-    // Calculate delta time in seconds, capped at 1/30 to prevent physics glitches.
-    let dt = (timestamp - lastTimestamp) / 1000;
-    lastTimestamp = timestamp;
-    if (dt > 1 / 30) dt = 1 / 30;
-    if (dt <= 0) dt = 0.016;
+    try {
+        // Calculate delta time in seconds, capped at 1/30 to prevent physics glitches.
+        let dt = (timestamp - lastTimestamp) / 1000;
+        lastTimestamp = timestamp;
+        if (dt > 1 / 30) dt = 1 / 30;
+        if (dt <= 0) dt = 0.016;
 
-    // Ensure audio is initialized on first user interaction.
-    if (!audio.initialized && (input.isKeyDown('Enter') || input.isMouseDown() || input.isPointerLocked())) {
-        audio.init();
-        audio.loadMusic('goldeneye_64.mp3');
-    }
+        // Ensure audio is initialized on first user interaction.
+        if (!audio.initialized && (input.isKeyDown('Enter') || input.isMouseDown() || input.isPointerLocked())) {
+            audio.init();
+            audio.loadMusic('goldeneye_64.mp3');
+        }
 
-    // Background music: play during gameplay, stop otherwise.
-    const shouldPlayMusic = (
-        gameState === GameState.PLAYING ||
-        gameState === GameState.MP_PLAYING ||
-        gameState === GameState.PAUSED
-    );
-    if (shouldPlayMusic && !audio.isMusicPlaying) {
-        audio.startMusic();
-    } else if (!shouldPlayMusic && audio.isMusicPlaying) {
-        audio.stopMusic();
-    }
+        // Background music: play during gameplay, stop otherwise.
+        const shouldPlayMusic = (
+            gameState === GameState.PLAYING ||
+            gameState === GameState.MP_PLAYING ||
+            gameState === GameState.PAUSED
+        );
+        if (shouldPlayMusic && !audio.isMusicPlaying) {
+            audio.startMusic();
+        } else if (!shouldPlayMusic && audio.isMusicPlaying) {
+            audio.stopMusic();
+        }
 
-    // Update UI systems that run always.
-    menuSystem.update(dt);
-    transitionSystem.update(dt);
+        // Update UI systems that run always.
+        menuSystem.update(dt);
+        transitionSystem.update(dt);
 
-    // Clear the display context.
-    bufferCtx.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        // Clear the display context.
+        bufferCtx.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    // State machine.
-    switch (gameState) {
-        case GameState.LOADING:
-            updateLoading(dt);
-            break;
-        case GameState.TITLE:
-            updateTitle(dt);
-            break;
-        case GameState.LEVEL_INTRO:
-            updateLevelIntro(dt);
-            break;
-        case GameState.PLAYING:
-            updatePlaying(dt);
-            renderPlaying(dt);
-            break;
-        case GameState.PAUSED:
-            if (mpMap) {
-                renderMultiplayer(dt);
-            } else {
+        // State machine.
+        switch (gameState) {
+            case GameState.LOADING:
+                updateLoading(dt);
+                break;
+            case GameState.TITLE:
+                updateTitle(dt);
+                break;
+            case GameState.LEVEL_INTRO:
+                updateLevelIntro(dt);
+                break;
+            case GameState.PLAYING:
+                updatePlaying(dt);
                 renderPlaying(dt);
-            }
-            menuSystem.renderPause(bufferCtx, { isMultiplayer: mpMap !== null });
-            updatePaused();
-            break;
-        case GameState.DEATH:
-            updateDeath(dt);
-            break;
-        case GameState.LEVEL_COMPLETE:
-            updateLevelComplete(dt);
-            break;
-        case GameState.VICTORY:
-            updateVictory(dt);
-            break;
-        case GameState.LOBBY:
-            updateLobby(dt);
-            break;
-        case GameState.MP_PLAYING:
-            updateMultiplayer(dt);
-            renderMultiplayer(dt);
-            break;
-        case GameState.MP_DEATH:
-            updateMpDeath(dt);
-            break;
-        case GameState.MP_VICTORY:
-            updateMpVictory(dt);
-            break;
+                break;
+            case GameState.PAUSED:
+                if (mpMap) {
+                    renderMultiplayer(dt);
+                } else {
+                    renderPlaying(dt);
+                }
+                menuSystem.renderPause(bufferCtx, { isMultiplayer: mpMap !== null });
+                updatePaused();
+                break;
+            case GameState.DEATH:
+                updateDeath(dt);
+                break;
+            case GameState.LEVEL_COMPLETE:
+                updateLevelComplete(dt);
+                break;
+            case GameState.VICTORY:
+                updateVictory(dt);
+                break;
+            case GameState.LOBBY:
+                updateLobby(dt);
+                break;
+            case GameState.MP_PLAYING:
+                updateMultiplayer(dt);
+                renderMultiplayer(dt);
+                break;
+            case GameState.MP_DEATH:
+                updateMpDeath(dt);
+                break;
+            case GameState.MP_VICTORY:
+                updateMpVictory(dt);
+                break;
+        }
+
+        // Blit the off-screen buffer onto the display canvas.
+        displayCtx.drawImage(buffer, 0, 0);
+
+        // Post-frame: capture key state for edge detection, then reset input deltas.
+        captureKeyState();
+        input.update();
+    } catch (err) {
+        console.error('[GameLoop] Uncaught error:', err instanceof Error ? err.message + '\n' + err.stack : String(err));
     }
-
-    // Blit the off-screen buffer onto the display canvas.
-    displayCtx.drawImage(buffer, 0, 0);
-
-    // Post-frame: capture key state for edge detection, then reset input deltas.
-    captureKeyState();
-    input.update();
 
     requestAnimationFrame(gameLoop);
 }
