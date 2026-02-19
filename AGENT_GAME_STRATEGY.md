@@ -1,6 +1,6 @@
 # Best Enemy Killing Strategy
 
-**Best Result**: 10/10 kills on Level 1 (all enemies eliminated in ~45 seconds)
+**Best Result**: 12/14 kills on Level 2 (after clearing Level 1 10/10) - Run 2
 
 ## Target Selection
 - Always prioritize the **nearest alive enemy** within line-of-sight (15-tile detection range)
