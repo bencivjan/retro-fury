@@ -1080,10 +1080,15 @@ function setupNetworkHandlers() {
                                 player.pos.x = p.x;
                                 player.pos.y = p.y;
                                 player.angle = p.angle;
+                                _posCorrX = 0;
+                                _posCorrY = 0;
+                            } else {
+                                // Accumulate position correction to be applied
+                                // gradually in updateMultiplayer() each frame.
+                                const blend = 0.3;
+                                _posCorrX += dx * blend;
+                                _posCorrY += dy * blend;
                             }
-                            const blend = 0.3;
-                            player.pos.x += dx * blend;
-                            player.pos.y += dy * blend;
                             player.angle = p.angle;
                             player.health = p.health;
                             player.alive = p.alive;
@@ -1239,6 +1244,10 @@ function onMultiplayerGameStart(msg) {
     gameState = GameState.MP_PLAYING;
 }
 
+// Accumulated position corrections from server reconciliation.
+// Applied gradually in updateMultiplayer() to avoid per-tick position jolts.
+let _posCorrX = 0, _posCorrY = 0;
+
 // =============================================================================
 // Multiplayer: Update - MP_PLAYING State
 // =============================================================================
@@ -1278,6 +1287,15 @@ function updateMultiplayer(dt) {
             const soundName = mpSoundMap[weaponSystem.currentWeapon];
             if (soundName) audio.play(soundName);
         }
+    }
+
+    // Apply accumulated position correction gradually (smooth out server jolts).
+    if (player && player.alive && (Math.abs(_posCorrX) > 0.001 || Math.abs(_posCorrY) > 0.001)) {
+        const decay = Math.min(1.0, 12.0 * dt); // ~20% per frame at 60fps
+        player.pos.x += _posCorrX * decay;
+        player.pos.y += _posCorrY * decay;
+        _posCorrX *= (1 - decay);
+        _posCorrY *= (1 - decay);
     }
 
     // Update multiplayer state (timers, remote player interpolation).
