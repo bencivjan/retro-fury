@@ -1083,14 +1083,16 @@ function setupNetworkHandlers() {
                             if (distSq > 4) {
                                 player.pos.x = p.x;
                                 player.pos.y = p.y;
-                                player.angle = p.angle;
                             } else {
                                 // Blend toward server position.
                                 const blend = 0.3;
                                 player.pos.x += dx * blend;
                                 player.pos.y += dy * blend;
-                                player.angle = p.angle;
                             }
+                            // Note: angle is NOT reconciled from server. The
+                            // client owns rotation via client-side prediction
+                            // to avoid jitter caused by the 20-tps server
+                            // overwriting the 60-fps local mouse-look.
                             player.health = p.health;
                             player.alive = p.alive;
                         }
@@ -1579,6 +1581,19 @@ function gameLoop(timestamp) {
     // Ensure audio is initialized on first user interaction.
     if (!audio.initialized && (input.isKeyDown('Enter') || input.isMouseDown() || input.isPointerLocked())) {
         audio.init();
+        audio.loadMusic('goldeneye_64.mp3');
+    }
+
+    // Background music: play during gameplay, stop otherwise.
+    const shouldPlayMusic = (
+        gameState === GameState.PLAYING ||
+        gameState === GameState.MP_PLAYING ||
+        gameState === GameState.PAUSED
+    );
+    if (shouldPlayMusic && !audio.isMusicPlaying) {
+        audio.startMusic();
+    } else if (!shouldPlayMusic && audio.isMusicPlaying) {
+        audio.stopMusic();
     }
 
     // Update UI systems that run always.

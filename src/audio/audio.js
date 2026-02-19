@@ -36,6 +36,15 @@ export class AudioManager {
 
         /** @type {boolean} */
         this._initialized = false;
+
+        /** @type {AudioBufferSourceNode|null} */
+        this._musicSource = null;
+
+        /** @type {GainNode|null} */
+        this._musicGain = null;
+
+        /** @type {AudioBuffer|null} */
+        this._musicBuffer = null;
     }
 
     // -------------------------------------------------------------------------
@@ -139,6 +148,70 @@ export class AudioManager {
      */
     get initialized() {
         return this._initialized;
+    }
+
+    /**
+     * Whether background music is currently playing.
+     * @returns {boolean}
+     */
+    get isMusicPlaying() {
+        return this._musicSource !== null;
+    }
+
+    /**
+     * Load a music file from a URL for use as looping background music.
+     * The file is fetched and decoded asynchronously. Call startMusic()
+     * once loading completes to begin playback.
+     *
+     * @param {string} url - Path or URL to the audio file.
+     */
+    async loadMusic(url) {
+        if (!this._initialized || !this._ctx) return;
+
+        try {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            this._musicBuffer = await this._ctx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.warn('[AudioManager] Failed to load music:', e);
+        }
+    }
+
+    /**
+     * Start playing the loaded music track in a loop.
+     * No-op if no music buffer has been loaded yet.
+     */
+    startMusic() {
+        this.stopMusic();
+        if (!this._initialized || !this._ctx || !this._musicBuffer) return;
+
+        const source = this._ctx.createBufferSource();
+        source.buffer = this._musicBuffer;
+        source.loop = true;
+
+        const gain = this._ctx.createGain();
+        gain.gain.value = 0.25;
+
+        source.connect(gain);
+        gain.connect(this._masterGain);
+        source.start(0);
+
+        this._musicSource = source;
+        this._musicGain = gain;
+    }
+
+    /**
+     * Stop the currently playing background music.
+     */
+    stopMusic() {
+        if (this._musicSource) {
+            try { this._musicSource.stop(); } catch (_) { /* already stopped */ }
+            this._musicSource = null;
+        }
+        if (this._musicGain) {
+            this._musicGain.disconnect();
+            this._musicGain = null;
+        }
     }
 
     // -------------------------------------------------------------------------
