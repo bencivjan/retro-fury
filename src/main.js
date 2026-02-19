@@ -1080,14 +1080,20 @@ function setupNetworkHandlers() {
                                 player.pos.x = p.x;
                                 player.pos.y = p.y;
                                 player.angle = p.angle;
-                                _posCorrX = 0;
-                                _posCorrY = 0;
+                                _visualOffsetX = 0;
+                                _visualOffsetY = 0;
                             } else {
-                                // Accumulate position correction to be applied
-                                // gradually in updateMultiplayer() each frame.
+                                // Record pre-correction position for visual smoothing.
+                                const oldX = player.pos.x;
+                                const oldY = player.pos.y;
                                 const blend = 0.3;
-                                _posCorrX += dx * blend;
-                                _posCorrY += dy * blend;
+                                player.pos.x += dx * blend;
+                                player.pos.y += dy * blend;
+                                // Visual offset = where we WERE minus where we ARE now.
+                                // This makes the camera "lag behind" the correction,
+                                // then decay to zero over the next few frames.
+                                _visualOffsetX += (oldX - player.pos.x);
+                                _visualOffsetY += (oldY - player.pos.y);
                             }
                             player.angle = p.angle;
                             player.health = p.health;
@@ -1244,9 +1250,10 @@ function onMultiplayerGameStart(msg) {
     gameState = GameState.MP_PLAYING;
 }
 
-// Accumulated position corrections from server reconciliation.
-// Applied gradually in updateMultiplayer() to avoid per-tick position jolts.
-let _posCorrX = 0, _posCorrY = 0;
+// Visual offset for smooth camera during server reconciliation.
+// Decays to zero each frame so the camera smoothly catches up to the
+// actual (corrected) player position.
+let _visualOffsetX = 0, _visualOffsetY = 0;
 
 // =============================================================================
 // Multiplayer: Update - MP_PLAYING State
@@ -1289,23 +1296,26 @@ function updateMultiplayer(dt) {
         }
     }
 
-    // Apply accumulated position correction gradually (smooth out server jolts).
-    if (player && player.alive && (Math.abs(_posCorrX) > 0.001 || Math.abs(_posCorrY) > 0.001)) {
-        const decay = Math.min(1.0, 12.0 * dt); // ~20% per frame at 60fps
-        player.pos.x += _posCorrX * decay;
-        player.pos.y += _posCorrY * decay;
-        _posCorrX *= (1 - decay);
-        _posCorrY *= (1 - decay);
-    }
+    // Decay visual offset so camera smoothly catches up to actual position.
+    const decay = Math.min(1.0, 12.0 * dt);
+    _visualOffsetX *= (1 - decay);
+    _visualOffsetY *= (1 - decay);
 
     // Update multiplayer state (timers, remote player interpolation).
     mpState.update(dt);
     killFeed.update(dt);
     scoreboard.setTiers(mpState.localTier, mpState.remoteTier);
 
-    // Sync camera to player position (locally predicted + smoothed).
+    // Sync camera to player position + visual offset (smoothed).
     if (player && player.alive) {
-        syncCamera();
+        const cos = Math.cos(player.angle);
+        const sin = Math.sin(player.angle);
+        camera.pos.x   = player.pos.x + _visualOffsetX;
+        camera.pos.y   = player.pos.y + _visualOffsetY;
+        camera.dir.x   = cos;
+        camera.dir.y   = sin;
+        camera.plane.x = -sin * 0.66;
+        camera.plane.y = cos * 0.66;
     }
 
     // Detect player taking damage.
