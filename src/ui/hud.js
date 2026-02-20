@@ -511,7 +511,7 @@ export class HUD {
      * @private
      */
     _renderObjectiveCounter(ctx, state) {
-        if (!state || state.total <= 0) return;
+        if (!state || !state.label || !(state.total > 0)) return;
 
         const text = `${state.label.toUpperCase()}: ${state.current}/${state.total}`;
         const x = this.screenWidth / 2;

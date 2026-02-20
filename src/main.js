@@ -1379,9 +1379,8 @@ function renderMultiplayer(dt) {
     // 6. Weapon sprite.
     drawWeaponSprite(bufferCtx);
 
-    // 7. HUD (health, weapon info).
-    const objState = { objectives: [], tabHeld: false };
-    hud.render(bufferCtx, player, weaponSystem, objState, dt);
+    // 7. HUD (health, weapon info). No objectives in multiplayer.
+    hud.render(bufferCtx, player, weaponSystem, null, dt);
 
     // 8. Kill feed.
     killFeed.render(bufferCtx);
@@ -1888,5 +1887,11 @@ window.__GAME_INTERNALS = {
     get totalTime() { return totalTime; },
     GameState,
     restartLevel,
+    get networkManager() { return networkManager; },
+    get mpState() { return mpState; },
+    get lobbyScreen() { return lobbyScreen; },
+    setupNetworkHandlers,
+    onMultiplayerGameStart,
+    handleLobbyAction,
 };
 window.__INPUT = input;
