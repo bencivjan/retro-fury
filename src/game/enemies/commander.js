@@ -811,6 +811,7 @@ export class Commander {
 
         if (this._dyingTimer <= 0) {
             this.alive = false;
+            this.isDying = false;
             this.animFrame = ANIM.DEATH_END;
         }
     }

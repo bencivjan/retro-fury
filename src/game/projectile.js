@@ -201,10 +201,7 @@ export class Projectile {
             // Direct hit.
             player.takeDamage(this.damage);
 
-            // Apply splash damage. The direct hit already dealt full damage,
-            // so splash only affects nearby enemies (not the player again).
-            this._applySplashDamage(null, player);
-
+            // Splash does NOT re-damage the direct-hit target.
             this.alive = false;
             return true;
         }

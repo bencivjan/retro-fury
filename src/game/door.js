@@ -103,10 +103,13 @@ export class Door {
                 this._timer += dt;
 
                 if (this._timer >= STAY_OPEN_DURATION) {
-                    // Don't close if the player is standing in the doorway.
+                    // Don't close if the player is near the doorway (within collision radius).
+                    const PLAYER_RADIUS = 0.25;
+                    const doorCenterX = this.x + 0.5;
+                    const doorCenterY = this.y + 0.5;
                     if (playerPos &&
-                        Math.floor(playerPos.x) === this.x &&
-                        Math.floor(playerPos.y) === this.y) {
+                        Math.abs(playerPos.x - doorCenterX) < 0.5 + PLAYER_RADIUS &&
+                        Math.abs(playerPos.y - doorCenterY) < 0.5 + PLAYER_RADIUS) {
                         this._timer = STAY_OPEN_DURATION; // hold open
                     } else {
                         this.state = DoorState.CLOSING;

@@ -175,8 +175,6 @@ export class RemotePlayer {
      * @returns {{ x: number, y: number, textureId: number, frameIndex: number, scaleX: number, scaleY: number }|null}
      */
     toWorldSprite() {
-        if (!this.alive) return null;
-
         return {
             x: this.pos.x,
             y: this.pos.y,

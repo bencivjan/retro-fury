@@ -195,7 +195,8 @@ export class Renderer {
 
             // ---- Texture sampling setup ----
             // texColumn: which column of the texture to sample.
-            const texColumn = (texX * TEX_SIZE) | 0;
+            let texColumn = (texX * TEX_SIZE) | 0;
+            if (texColumn >= TEX_SIZE) texColumn = TEX_SIZE - 1;
 
             // Retrieve the texture pixel data.
             const texture = textures[texId] || textures[1]; // fallback to texture 1

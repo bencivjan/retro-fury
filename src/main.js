@@ -258,7 +258,9 @@ function captureKeyState() {
                    'KeyW', 'KeyS', 'ArrowUp', 'ArrowDown', 'Backspace',
                    'KeyA', 'KeyB', 'KeyC', 'KeyD', 'KeyF', 'KeyG', 'KeyH',
                    'KeyI', 'KeyJ', 'KeyK', 'KeyL', 'KeyN', 'KeyO', 'KeyP',
-                   'KeyT', 'KeyU', 'KeyV', 'KeyX', 'KeyY', 'KeyZ'];
+                   'KeyT', 'KeyU', 'KeyV', 'KeyX', 'KeyY', 'KeyZ',
+                   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
+                   'Digit6', 'Digit7'];
     for (const code of codes) {
         if (input.isKeyDown(code)) {
             prevKeysDown.add(code);
@@ -701,7 +703,7 @@ function updatePlaying(dt) {
     handleInteractions();
 
     // 5. Update weapon system.
-    const fireResult = weaponSystem.update(dt, input, player, enemies, map);
+    const fireResult = weaponSystem.update(dt, input, player, enemies, map, wasKeyJustPressed);
 
     // 6. Handle weapon fire results.
     if (fireResult && fireResult.empty) {
@@ -1195,7 +1197,9 @@ function setupNetworkHandlers() {
     });
 
     networkManager.onDisconnect(() => {
-        if (gameState === GameState.MP_PLAYING || gameState === GameState.MP_DEATH) {
+        if (gameState === GameState.MP_PLAYING || gameState === GameState.MP_DEATH ||
+            gameState === GameState.LOBBY || gameState === GameState.MP_VICTORY ||
+            (gameState === GameState.PAUSED && mpMap)) {
             mpState.reset();
             mpMap = null;
             gameState = GameState.TITLE;
@@ -1253,6 +1257,10 @@ function onMultiplayerGameStart(msg) {
     doors = [];
     projectiles = [];
 
+    // Reset visual offsets from any previous match.
+    _visualOffsetX = 0;
+    _visualOffsetY = 0;
+
     // Sync camera.
     syncCamera();
     prevPlayerHealth = player.health;
@@ -1296,7 +1304,7 @@ function updateMultiplayer(dt) {
     // Update weapon system animation (fire animation, bob) for visual feedback.
     // Hit detection is server-side, so we pass empty enemies to skip local damage.
     if (player && mpMap) {
-        const mpFireResult = weaponSystem.update(dt, input, player, [], mpMap);
+        const mpFireResult = weaponSystem.update(dt, input, player, [], mpMap, wasKeyJustPressed);
         if (mpFireResult) {
             // Play weapon fire sound locally.
             const mpSoundMap = { 0: 'pistol_fire', 1: 'shotgun_fire', 2: 'machinegun_fire', 5: 'sniper_fire', 6: 'knife_swing' };
@@ -1656,6 +1664,8 @@ function gameLoop(timestamp) {
                 break;
             case GameState.PAUSED:
                 if (mpMap) {
+                    // Keep remote player interpolation running during pause.
+                    mpState.update(dt);
                     renderMultiplayer(dt);
                 } else {
                     renderPlaying(dt);

@@ -9,7 +9,7 @@ const SUPPRESSED_KEYS = new Set([
     'KeyM',                             // Map toggle
     'Tab',                              // Scoreboard / inventory
     'Digit1', 'Digit2', 'Digit3',      // Weapon slots
-    'Digit4', 'Digit5',
+    'Digit4', 'Digit5', 'Digit6', 'Digit7',
     'Escape',                           // Menu / release pointer lock
 ]);
 
@@ -201,6 +201,9 @@ class InputManager {
             document.body.classList.add('pointer-locked');
         } else {
             document.body.classList.remove('pointer-locked');
+            // Clear Escape from held keys -- some browsers don't fire keyup
+            // when pointer lock is released via Escape.
+            this._keysDown.delete('Escape');
         }
     }
 

@@ -192,19 +192,23 @@ export class WeaponSystem {
      * @param {import('./player.js').Player} player - The player entity.
      * @param {Array} enemies - Array of enemy entities for hitscan checks.
      * @param {{ grid: number[][], width: number, height: number }} map - Tile map.
+     * @param {Function} [wasKeyJustPressed] - Edge-detected key press checker.
      * @returns {Object|null} Fire result. For hitscan: { hit, enemy, damage } or
      *   null. For projectile: { projectile: { x, y, dx, dy, speed, damage, ... } }.
      */
-    update(dt, input, player, enemies, map) {
+    update(dt, input, player, enemies, map, wasKeyJustPressed) {
         if (!player.alive) return null;
 
         // Sync weapon index from player in case it changed externally.
         this.currentWeapon = player.currentWeapon;
 
-        // ---- Weapon switching via number keys ----
-        for (let i = 0; i < 7; i++) {
-            if (input.isKeyDown(`Digit${i + 1}`)) {
-                this.switchWeapon(i, player);
+        // ---- Weapon switching via number keys (edge-detected) ----
+        if (wasKeyJustPressed) {
+            for (let i = 0; i < 7; i++) {
+                if (wasKeyJustPressed(`Digit${i + 1}`)) {
+                    this.switchWeapon(i, player);
+                    break;
+                }
             }
         }
 
