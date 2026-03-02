@@ -42,15 +42,6 @@ import { MenuSystem } from './ui/menu.js';
 import { ObjectiveSystem } from './ui/objectives.js';
 import { TransitionSystem } from './ui/transitions.js';
 
-// -- Multiplayer --------------------------------------------------------------
-import { NetworkManager } from './net/network-manager.js';
-import { MultiplayerState } from './net/mp-state.js';
-import { LobbyScreen } from './ui/lobby.js';
-import { KillFeed } from './ui/kill-feed.js';
-import { ScoreboardDisplay } from './ui/scoreboard.js';
-import { GUN_GAME_TIERS, TIER_NAMES } from './game/gun-game.js';
-import arena from './levels/arena.js';
-
 // -- Utils / Assets -----------------------------------------------------------
 import { TextureManager } from './utils/textures.js';
 import { AudioManager } from './audio/audio.js';
@@ -91,11 +82,6 @@ const GameState = Object.freeze({
     DEATH:          5,
     LEVEL_COMPLETE: 6,
     VICTORY:        7,
-    // Multiplayer states
-    LOBBY:          8,
-    MP_PLAYING:     9,
-    MP_DEATH:       10,
-    MP_VICTORY:     11,
 });
 
 // =============================================================================
@@ -170,13 +156,6 @@ const levelLoader = new LevelLoader();
 // Weapon system.
 const weaponSystem = new WeaponSystem();
 
-// Multiplayer subsystems.
-const networkManager  = new NetworkManager();
-const mpState         = new MultiplayerState();
-const lobbyScreen     = new LobbyScreen(SCREEN_WIDTH, SCREEN_HEIGHT);
-const killFeed        = new KillFeed();
-const scoreboard      = new ScoreboardDisplay();
-
 // =============================================================================
 // Game State Variables
 // =============================================================================
@@ -232,15 +211,6 @@ let victoryStats = null;
 
 // -- Loading state --
 let loadingDone = false;
-
-// -- Multiplayer state --
-/** @type {{ grid: number[][], width: number, height: number }|null} Arena map for MP. */
-let mpMap = null;
-let mpPalette = arena.palette;
-/** @type {number} MP death respawn timer for death screen display. */
-let mpDeathTimer = 0;
-/** @type {string|null} MP death message ("YOU WERE KILLED BY ...") */
-let mpDeathKillerWeapon = null;
 
 // =============================================================================
 // Key Edge Detection
@@ -1028,544 +998,6 @@ function renderPlaying(dt) {
 }
 
 // =============================================================================
-// Multiplayer: Network Message Handler
-// =============================================================================
-
-function setupNetworkHandlers() {
-    networkManager.onMessage((msg) => {
-        switch (msg.type) {
-            case 'room_created':
-                lobbyScreen.setRoomCode(msg.roomCode);
-                if (msg.playerId !== undefined && msg.playerId !== null) {
-                    mpState.localPlayerId = msg.playerId;
-                }
-                break;
-
-            case 'player_joined':
-                // Joiner receives their own playerId in this message.
-                // Host already learns theirs from room_created.
-                if (
-                    mpState.localPlayerId === null &&
-                    lobbyScreen.roomCode === '' &&
-                    msg.playerId !== undefined &&
-                    msg.playerId !== null
-                ) {
-                    mpState.localPlayerId = msg.playerId;
-                }
-                lobbyScreen.opponentJoined();
-                break;
-
-            case 'player_ready':
-                if (
-                    mpState.localPlayerId !== null &&
-                    msg.playerId !== mpState.localPlayerId
-                ) {
-                    lobbyScreen.opponentReady();
-                }
-                break;
-
-            case 'game_start':
-                onMultiplayerGameStart(msg);
-                break;
-
-            case 'state':
-                mpState.applyServerState(msg);
-                // Reconcile local player with server state using interpolation
-                // to avoid jarring snaps while still staying authoritative.
-                if (msg.players && player) {
-                    for (const p of msg.players) {
-                        if (p.id === mpState.localPlayerId) {
-                            // Lerp toward server position for smooth correction.
-                            const dx = p.x - player.pos.x;
-                            const dy = p.y - player.pos.y;
-                            const distSq = dx * dx + dy * dy;
-                            // If too far off (>2 tiles), snap immediately.
-                            if (distSq > 4) {
-                                player.pos.x = p.x;
-                                player.pos.y = p.y;
-                            } else {
-                                // Blend toward server position.
-                                const blend = 0.3;
-                                player.pos.x += dx * blend;
-                                player.pos.y += dy * blend;
-                            }
-                            // Note: angle is NOT reconciled from server. The
-                            // client owns rotation via client-side prediction
-                            // to avoid jitter caused by the 20-tps server
-                            // overwriting the 60-fps local mouse-look.
-                            player.health = p.health;
-                            player.alive = p.alive;
-                        }
-                    }
-                }
-                break;
-
-            case 'hit':
-                if (msg.shooterId === mpState.localPlayerId) {
-                    mpState.triggerHitConfirm();
-                }
-                if (msg.shooterId === mpState.remotePlayerId) {
-                    mpState.remotePlayer.triggerFire();
-                }
-                if (msg.targetId === mpState.localPlayerId && player) {
-                    player.health = msg.targetHealth;
-                    hud.triggerDamageFlash();
-                    audio.play('player_hurt');
-                }
-                break;
-
-            case 'kill': {
-                const prevLocalTier = mpState.localTier;
-                const killResult = mpState.handleKill(msg);
-                killFeed.addKill(
-                    msg.killerId === mpState.localPlayerId ? 'YOU' : 'OPP',
-                    msg.victimId === mpState.localPlayerId ? 'YOU' : 'OPP',
-                    msg.weapon
-                );
-
-                if (killResult.isLocalKill) {
-                    audio.play('enemy_death');
-                    // Weapon promotion.
-                    const newTier = msg.killerNewTier;
-                    if (newTier !== undefined && newTier > prevLocalTier) {
-                        const weaponIdx = GUN_GAME_TIERS[newTier];
-                        player.weapons = Array(7).fill(false);
-                        player.weapons[weaponIdx] = true;
-                        player.currentWeapon = weaponIdx;
-                        weaponSystem.currentWeapon = weaponIdx;
-                        mpState.triggerPromotion(TIER_NAMES[newTier]);
-                    }
-                }
-
-                if (killResult.isLocalDeath) {
-                    audio.play('player_death');
-                    mpDeathKillerWeapon = msg.weapon;
-                    mpDeathTimer = 3.0;
-                    gameState = GameState.MP_DEATH;
-                }
-                break;
-            }
-
-            case 'respawn':
-                if (msg.playerId === mpState.localPlayerId) {
-                    // Local player respawned.
-                    player.pos.x = msg.x;
-                    player.pos.y = msg.y;
-                    player.angle = msg.angle || 0;
-                    player.health = 100;
-                    player.alive = true;
-                    syncCamera();
-                    gameState = GameState.MP_PLAYING;
-                } else {
-                    // Remote player respawned - snap to position.
-                    mpState.remotePlayer.snapTo(msg.x, msg.y);
-                }
-                break;
-
-            case 'victory':
-                mpState.setWinner(msg.winnerId);
-                gameState = GameState.MP_VICTORY;
-                break;
-
-            case 'opponent_disconnected':
-                // Return to title with a message.
-                networkManager.disconnect();
-                mpState.reset();
-                mpMap = null;
-                gameState = GameState.TITLE;
-                break;
-
-            case 'error':
-                lobbyScreen.showError(msg.message || 'Unknown error');
-                break;
-        }
-    });
-
-    networkManager.onDisconnect(() => {
-        if (gameState === GameState.MP_PLAYING || gameState === GameState.MP_DEATH) {
-            mpState.reset();
-            mpMap = null;
-            gameState = GameState.TITLE;
-        }
-    });
-}
-
-// =============================================================================
-// Multiplayer: Game Start
-// =============================================================================
-
-function onMultiplayerGameStart(msg) {
-    const localId = msg.yourId;
-    const playerIds = msg.players;
-    const remoteId = playerIds.find(id => id !== localId);
-
-    mpState.initMatch(localId, remoteId);
-
-    // Set up the arena map (deep copy to prevent mutation of module data).
-    mpMap = {
-        grid: arena.map.map(row => [...row]),
-        width: arena.map[0].length,
-        height: arena.map.length,
-    };
-    map = mpMap;
-    palette = arena.palette;
-
-    // Create local player at assigned spawn.
-    const spawn = msg.spawnPoints[localId];
-    player = new Player(spawn.x, spawn.y, spawn.angle || 0);
-
-    // In gun game, start with pistol only and infinite ammo.
-    player.weapons = Array(7).fill(false);
-    player.weapons[0] = true;
-    player.currentWeapon = 0;
-    player.ammo = { bullets: Infinity, shells: Infinity, rockets: Infinity, cells: Infinity };
-
-    weaponSystem.currentWeapon = 0;
-    weaponSystem.state = 0;
-    weaponSystem.fireTimer = 0;
-    weaponSystem.animFrame = 0;
-    weaponSystem.bobPhase = 0;
-
-    // Snap remote player to their spawn.
-    const remoteSpawn = msg.spawnPoints[remoteId];
-    mpState.remotePlayer.snapTo(remoteSpawn.x, remoteSpawn.y);
-
-    // Initialize UI.
-    scoreboard.setTiers(0, 0);
-    killFeed.clear();
-
-    // Reset enemies/items/doors/projectiles (none in arena).
-    enemies = [];
-    items = [];
-    doors = [];
-    projectiles = [];
-
-    // Sync camera.
-    syncCamera();
-    prevPlayerHealth = player.health;
-
-    gameState = GameState.MP_PLAYING;
-}
-
-// =============================================================================
-// Multiplayer: Update - MP_PLAYING State
-// =============================================================================
-
-function updateMultiplayer(dt) {
-    lastDt = dt;
-
-    // Send input to server.
-    const keys = [];
-    if (input.isKeyDown('KeyW')) keys.push('KeyW');
-    if (input.isKeyDown('KeyS')) keys.push('KeyS');
-    if (input.isKeyDown('KeyA')) keys.push('KeyA');
-    if (input.isKeyDown('KeyD')) keys.push('KeyD');
-
-    networkManager.send({
-        type: 'input',
-        keys,
-        mouseDX: input.getMouseDeltaX(),
-        mouseDY: input.getMouseDeltaY(),
-        fire: input.isMouseDown(),
-        dt,
-    });
-
-    // Client-side prediction: apply local movement immediately for responsive feel.
-    // The server will reconcile position, but local movement gives 60fps feedback.
-    if (player && player.alive && mpMap) {
-        player.update(dt, mpMap, input);
-    }
-
-    // Update weapon system animation (fire animation, bob) for visual feedback.
-    // Hit detection is server-side, so we pass empty enemies to skip local damage.
-    const mpFireResult = weaponSystem.update(dt, input, player, [], mpMap || { grid: [], width: 0, height: 0 });
-    if (mpFireResult) {
-        // Play weapon fire sound locally.
-        const mpSoundMap = { 0: 'pistol_fire', 1: 'shotgun_fire', 2: 'machinegun_fire', 5: 'sniper_fire', 6: 'knife_swing' };
-        const soundName = mpSoundMap[weaponSystem.currentWeapon];
-        if (soundName) audio.play(soundName);
-    }
-
-    // Update multiplayer state (timers, remote player interpolation).
-    mpState.update(dt);
-    killFeed.update(dt);
-    scoreboard.setTiers(mpState.localTier, mpState.remoteTier);
-
-    // Sync camera to player position (locally predicted).
-    if (player && player.alive) {
-        syncCamera();
-    }
-
-    // Detect player taking damage.
-    if (player && player.health < prevPlayerHealth) {
-        hud.triggerDamageFlash();
-    }
-    if (player) prevPlayerHealth = player.health;
-
-    // Pause on Escape.
-    if (wasKeyJustPressed('Escape')) {
-        gameState = GameState.PAUSED;
-        if (document.pointerLockElement) {
-            document.exitPointerLock();
-        }
-    }
-}
-
-// =============================================================================
-// Multiplayer: Render - MP_PLAYING State
-// =============================================================================
-
-function renderMultiplayer(dt) {
-    if (!player || !mpMap) return;
-
-    // 1. Clear.
-    renderer.clear();
-
-    // 2. Ceiling and floor.
-    const horizonOffset = Math.round(player.pitch);
-    renderer.drawCeilingAndFloor(mpPalette, horizonOffset);
-
-    // 3. Raycast and draw walls.
-    const depthBuffer = raycaster.castRays(camera, mpMap.grid, SCREEN_WIDTH);
-    renderer.drawWalls(raycaster.results, textures, SCREEN_WIDTH, SCREEN_HEIGHT, horizonOffset);
-
-    // 4. Build sprite list (remote player only in MP).
-    const sprites = [];
-    const remoteSprite = mpState.remotePlayer.toWorldSprite();
-    if (remoteSprite) {
-        sprites.push(remoteSprite);
-    }
-
-    spriteRenderer.render(
-        sprites, camera, depthBuffer, bufferCtx,
-        textures, SCREEN_WIDTH, SCREEN_HEIGHT,
-        renderer.pixels, horizonOffset
-    );
-
-    // 5. Present.
-    renderer.present();
-
-    // 6. Weapon sprite.
-    drawWeaponSprite(bufferCtx);
-
-    // 7. HUD (health, weapon info).
-    const objState = { objectives: [], tabHeld: false };
-    hud.render(bufferCtx, player, weaponSystem, objState, dt);
-
-    // 8. Kill feed.
-    killFeed.render(bufferCtx);
-
-    // 9. Scoreboard.
-    scoreboard.render(bufferCtx, SCREEN_WIDTH);
-
-    // 10. Tab overlay for detailed scoreboard.
-    if (input.isKeyDown('Tab')) {
-        scoreboard.renderOverlay(bufferCtx, SCREEN_WIDTH, SCREEN_HEIGHT);
-    }
-
-    // 11. Hit confirm flash.
-    if (mpState.hitConfirmTimer > 0) {
-        bufferCtx.save();
-        bufferCtx.globalAlpha = Math.min(mpState.hitConfirmTimer / 0.15, 1.0) * 0.3;
-        bufferCtx.fillStyle = '#FFFFFF';
-        bufferCtx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        bufferCtx.restore();
-    }
-
-    // 12. Promotion flash.
-    if (mpState.promotionTimer > 0 && mpState.promotionWeaponName) {
-        bufferCtx.save();
-        const alpha = Math.min(mpState.promotionTimer / 2.0, 1.0);
-        bufferCtx.globalAlpha = alpha;
-        bufferCtx.font = 'bold 12px "Courier New", Courier, monospace';
-        bufferCtx.fillStyle = '#FFCC00';
-        bufferCtx.textAlign = 'center';
-        bufferCtx.textBaseline = 'middle';
-        bufferCtx.fillText(`PROMOTED: ${mpState.promotionWeaponName}`, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 20);
-        bufferCtx.restore();
-    }
-
-    // Prompt users to click so the browser can grant pointer lock.
-    if (!input.isPointerLocked()) {
-        bufferCtx.save();
-        bufferCtx.font = 'bold 14px "Courier New"';
-        bufferCtx.fillStyle = '#FFCC00';
-        bufferCtx.textAlign = 'center';
-        bufferCtx.textBaseline = 'middle';
-        bufferCtx.fillText('CLICK TO PLAY', SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
-        bufferCtx.restore();
-    }
-}
-
-// =============================================================================
-// Multiplayer: Lobby Update
-// =============================================================================
-
-function updateLobby(dt) {
-    lobbyScreen.update(dt);
-    lobbyScreen.render(bufferCtx);
-
-    // Handle lobby key input.
-    const lobbyCodes = ['KeyW', 'KeyS', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Backspace',
-                        'KeyA', 'KeyB', 'KeyC', 'KeyD', 'KeyE', 'KeyF', 'KeyG', 'KeyH',
-                        'KeyI', 'KeyJ', 'KeyK', 'KeyL', 'KeyM', 'KeyN', 'KeyO', 'KeyP',
-                        'KeyQ', 'KeyR', 'KeyT', 'KeyU', 'KeyV', 'KeyX', 'KeyY', 'KeyZ'];
-
-    for (const code of lobbyCodes) {
-        if (wasKeyJustPressed(code)) {
-            const result = lobbyScreen.handleKey(code);
-            if (result) {
-                handleLobbyAction(result);
-            }
-        }
-    }
-}
-
-async function handleLobbyAction(result) {
-    switch (result.action) {
-        case 'host':
-            try {
-                await networkManager.connect();
-                setupNetworkHandlers();
-                networkManager.send({ type: 'create_room' });
-            } catch {
-                lobbyScreen.showError('FAILED TO CONNECT TO SERVER');
-                lobbyScreen.state = 0; // Back to CHOOSE.
-            }
-            break;
-
-        case 'join':
-            try {
-                if (!networkManager.isConnected()) {
-                    await networkManager.connect();
-                    setupNetworkHandlers();
-                }
-                networkManager.send({ type: 'join_room', roomCode: result.data });
-            } catch {
-                lobbyScreen.showError('FAILED TO CONNECT TO SERVER');
-                lobbyScreen.state = 0; // Back to CHOOSE.
-            }
-            break;
-
-        case 'ready':
-            networkManager.send({ type: 'ready' });
-            break;
-
-        case 'back':
-            networkManager.disconnect();
-            gameState = GameState.TITLE;
-            break;
-    }
-}
-
-// =============================================================================
-// Multiplayer: MP_DEATH Update
-// =============================================================================
-
-function updateMpDeath(dt) {
-    mpDeathTimer -= dt;
-
-    // Keep rendering the game world behind the death overlay.
-    renderMultiplayer(dt);
-
-    // Death overlay.
-    bufferCtx.save();
-    bufferCtx.fillStyle = 'rgba(100, 0, 0, 0.5)';
-    bufferCtx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    bufferCtx.font = 'bold 16px "Courier New", Courier, monospace';
-    bufferCtx.fillStyle = '#FF0000';
-    bufferCtx.textAlign = 'center';
-    bufferCtx.textBaseline = 'middle';
-    bufferCtx.fillText('KILLED!', SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 10);
-
-    if (mpDeathKillerWeapon) {
-        bufferCtx.font = 'bold 8px "Courier New", Courier, monospace';
-        bufferCtx.fillStyle = '#FF6666';
-        bufferCtx.fillText(`WEAPON: ${mpDeathKillerWeapon}`, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 10);
-    }
-
-    const respawnSec = Math.max(0, Math.ceil(mpDeathTimer));
-    bufferCtx.font = 'bold 8px "Courier New", Courier, monospace';
-    bufferCtx.fillStyle = '#AAAAAA';
-    bufferCtx.fillText(`RESPAWNING IN ${respawnSec}...`, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 30);
-
-    bufferCtx.restore();
-
-    // Continue processing network messages (state/respawn) via the handler.
-    mpState.update(dt);
-    killFeed.update(dt);
-}
-
-// =============================================================================
-// Multiplayer: MP_VICTORY Update
-// =============================================================================
-
-function updateMpVictory(dt) {
-    bufferCtx.save();
-
-    bufferCtx.fillStyle = '#000000';
-    bufferCtx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    const cx = SCREEN_WIDTH / 2;
-    const cy = SCREEN_HEIGHT / 2;
-    const won = mpState.didLocalWin();
-
-    if (won) {
-        // Victory glow.
-        const glow = bufferCtx.createRadialGradient(cx, cy - 20, 20, cx, cy - 20, SCREEN_WIDTH * 0.5);
-        glow.addColorStop(0, 'rgba(255, 200, 0, 0.1)');
-        glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        bufferCtx.fillStyle = glow;
-        bufferCtx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-        bufferCtx.font = 'bold 22px "Courier New", Courier, monospace';
-        bufferCtx.textAlign = 'center';
-        bufferCtx.textBaseline = 'middle';
-        bufferCtx.fillStyle = '#332200';
-        bufferCtx.fillText('VICTORY!', cx + 2, cy - 20 + 2);
-        bufferCtx.fillStyle = '#FFD700';
-        bufferCtx.fillText('VICTORY!', cx, cy - 20);
-
-        bufferCtx.font = 'bold 8px "Courier New", Courier, monospace';
-        bufferCtx.fillStyle = '#CCAA44';
-        bufferCtx.textBaseline = 'top';
-        bufferCtx.fillText('YOU COMPLETED THE GUN GAME!', cx, cy + 10);
-    } else {
-        bufferCtx.font = 'bold 22px "Courier New", Courier, monospace';
-        bufferCtx.textAlign = 'center';
-        bufferCtx.textBaseline = 'middle';
-        bufferCtx.fillStyle = '#330000';
-        bufferCtx.fillText('DEFEAT', cx + 2, cy - 20 + 2);
-        bufferCtx.fillStyle = '#FF4444';
-        bufferCtx.fillText('DEFEAT', cx, cy - 20);
-
-        bufferCtx.font = 'bold 8px "Courier New", Courier, monospace';
-        bufferCtx.fillStyle = '#CC4444';
-        bufferCtx.textBaseline = 'top';
-        bufferCtx.fillText('YOUR OPPONENT COMPLETED THE GUN GAME', cx, cy + 10);
-    }
-
-    // Blinking prompt.
-    if (menuSystem.isBlinkOn()) {
-        bufferCtx.font = 'bold 10px "Courier New", Courier, monospace';
-        bufferCtx.fillStyle = won ? '#FFD700' : '#FF4444';
-        bufferCtx.textAlign = 'center';
-        bufferCtx.textBaseline = 'top';
-        bufferCtx.fillText('PRESS ENTER TO RETURN', cx, cy + 40);
-    }
-
-    bufferCtx.restore();
-
-    if (wasKeyJustPressed('Enter')) {
-        networkManager.disconnect();
-        mpState.reset();
-        mpMap = null;
-        gameState = GameState.TITLE;
-    }
-}
-
-// =============================================================================
 // Main Game Loop
 // =============================================================================
 
@@ -1587,7 +1019,6 @@ function gameLoop(timestamp) {
     // Background music: play during gameplay, stop otherwise.
     const shouldPlayMusic = (
         gameState === GameState.PLAYING ||
-        gameState === GameState.MP_PLAYING ||
         gameState === GameState.PAUSED
     );
     if (shouldPlayMusic && !audio.isMusicPlaying) {
@@ -1619,12 +1050,8 @@ function gameLoop(timestamp) {
             renderPlaying(dt);
             break;
         case GameState.PAUSED:
-            if (mpMap) {
-                renderMultiplayer(dt);
-            } else {
-                renderPlaying(dt);
-            }
-            menuSystem.renderPause(bufferCtx, { isMultiplayer: mpMap !== null });
+            renderPlaying(dt);
+            menuSystem.renderPause(bufferCtx);
             updatePaused();
             break;
         case GameState.DEATH:
@@ -1635,19 +1062,6 @@ function gameLoop(timestamp) {
             break;
         case GameState.VICTORY:
             updateVictory(dt);
-            break;
-        case GameState.LOBBY:
-            updateLobby(dt);
-            break;
-        case GameState.MP_PLAYING:
-            updateMultiplayer(dt);
-            renderMultiplayer(dt);
-            break;
-        case GameState.MP_DEATH:
-            updateMpDeath(dt);
-            break;
-        case GameState.MP_VICTORY:
-            updateMpVictory(dt);
             break;
     }
 
@@ -1708,10 +1122,6 @@ function updateTitle(dt) {
                 introCharIndex = 0;
                 transitionSystem.resetElapsed();
                 gameState = GameState.LEVEL_INTRO;
-            } else if (result === 'multiplayer') {
-                // Enter multiplayer lobby.
-                lobbyScreen.reset();
-                gameState = GameState.LOBBY;
             }
         }
     }
@@ -1745,19 +1155,17 @@ function updateLevelIntro(dt) {
 }
 
 function updatePaused() {
-    const isMP = mpMap !== null;
-
     // Resume on Escape.
     if (wasKeyJustPressed('Escape')) {
-        gameState = isMP ? GameState.MP_PLAYING : GameState.PLAYING;
+        gameState = GameState.PLAYING;
         if (displayCanvas && !input.isPointerLocked()) {
             displayCanvas.requestPointerLock();
         }
         return;
     }
 
-    // Restart on R (single player only).
-    if (!isMP && wasKeyJustPressed('KeyR')) {
+    // Restart on R.
+    if (wasKeyJustPressed('KeyR')) {
         restartLevel();
         prevPlayerHealth = player ? player.health : 100;
         gameState = GameState.PLAYING;
@@ -1769,11 +1177,6 @@ function updatePaused() {
 
     // Quit to title on Q.
     if (wasKeyJustPressed('KeyQ')) {
-        if (isMP) {
-            networkManager.disconnect();
-            mpState.reset();
-            mpMap = null;
-        }
         gameState = GameState.TITLE;
         return;
     }
