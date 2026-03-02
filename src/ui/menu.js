@@ -97,7 +97,7 @@ export class MenuSystem {
         ctx.textBaseline = 'top';
 
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('> SINGLE PLAYER <', cx, modeY);
+        ctx.fillText('> START <', cx, modeY);
 
         // -- Controls list --
         const controlsY = cy + 55;
