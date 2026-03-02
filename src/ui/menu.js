@@ -40,8 +40,8 @@ export class MenuSystem {
         /** @type {number} Elapsed time accumulator for animations. */
         this._elapsed = 0;
 
-        /** @type {number} Selected mode on title screen (0=single, 1=multi). */
-        this.selectedMode = 0;
+        /** @type {number} Elapsed time accumulator (kept for API compat). */
+        this._titleReady = false;
     }
 
     // -------------------------------------------------------------------------
@@ -90,17 +90,14 @@ export class MenuSystem {
         ctx.textBaseline = 'top';
         ctx.fillText('A RETRO FIRST-PERSON SHOOTER', cx, cy - 5);
 
-        // -- Mode selection --
+        // -- Single-player label --
         const modeY = cy + 12;
         ctx.font = `bold 8px ${FONT_FAMILY}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
 
-        ctx.fillStyle = this.selectedMode === 0 ? '#FFCC00' : '#666666';
-        ctx.fillText(this.selectedMode === 0 ? '> SINGLE PLAYER <' : '  SINGLE PLAYER  ', cx, modeY);
-
-        ctx.fillStyle = this.selectedMode === 1 ? '#FFCC00' : '#666666';
-        ctx.fillText(this.selectedMode === 1 ? '> MULTIPLAYER <' : '  MULTIPLAYER  ', cx, modeY + 14);
+        ctx.fillStyle = '#FFCC00';
+        ctx.fillText('> SINGLE PLAYER <', cx, modeY);
 
         // -- Controls list --
         const controlsY = cy + 55;
@@ -132,7 +129,7 @@ export class MenuSystem {
      *
      * @param {CanvasRenderingContext2D} ctx
      */
-    renderPause(ctx, { isMultiplayer = false } = {}) {
+    renderPause(ctx) {
         ctx.save();
 
         // -- Semi-transparent dark overlay --
@@ -159,10 +156,8 @@ export class MenuSystem {
         ctx.fillStyle = '#AAAAAA';
         ctx.textBaseline = 'top';
         ctx.fillText('ESC - RESUME', cx, cy + 15);
-        if (!isMultiplayer) {
-            ctx.fillText('R - RESTART LEVEL', cx, cy + 30);
-        }
-        ctx.fillText('Q - QUIT TO TITLE', cx, cy + (isMultiplayer ? 30 : 45));
+        ctx.fillText('R - RESTART LEVEL', cx, cy + 30);
+        ctx.fillText('Q - QUIT TO TITLE', cx, cy + 45);
 
         // -- Scanlines --
         this._renderScanlines(ctx);
@@ -322,33 +317,16 @@ export class MenuSystem {
     }
 
     /**
-     * Handle key input on the title screen for mode selection.
+     * Handle key input on the title screen.
      *
      * @param {string} code - Key code.
-     * @returns {string|null} 'singleplayer', 'multiplayer', or null.
+     * @returns {string|null} 'singleplayer' or null.
      */
     handleTitleKey(code) {
-        if (code === 'KeyW' || code === 'ArrowUp') {
-            this.selectedMode = 0;
-            return null;
-        }
-        if (code === 'KeyS' || code === 'ArrowDown') {
-            this.selectedMode = 1;
-            return null;
-        }
         if (code === 'Enter') {
-            return this.selectedMode === 0 ? 'singleplayer' : 'multiplayer';
+            return 'singleplayer';
         }
         return null;
-    }
-
-    /**
-     * Get the currently selected game mode.
-     *
-     * @returns {'singleplayer'|'multiplayer'}
-     */
-    getSelectedMode() {
-        return this.selectedMode === 0 ? 'singleplayer' : 'multiplayer';
     }
 
     /**
