@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RETRO FURY - Tests</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 24px;
+        }
+        h1 { color: #c0c0c0; margin-bottom: 16px; }
+        .banner {
+            padding: 12px 20px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .banner.pass { background: #0a6e0a; color: #ffffff; }
+        .banner.fail { background: #8b0000; color: #ffffff; }
+        details { margin-bottom: 8px; }
+        summary {
+            cursor: pointer;
+            padding: 6px 10px;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        summary.suite-pass { background: #0f3d0f; }
+        summary.suite-fail { background: #3d0f0f; }
+        .test {
+            padding: 4px 24px;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+        .test.pass { color: #66bb6a; }
+        .test.fail { color: #ef5350; }
+    </style>
+</head>
+<body>
+    <h1>RETRO FURY - Test Suite</h1>
+    <div id="results"></div>
+
+    <!-- Test runner must load first, then test suites, then run -->
+    <script type="module">
+        // Import all test suites here. Each suite registers tests via
+        // describe/it calls at module evaluation time.
+        import './test-math.js';
+
+        // After all suites are registered, run them.
+        import { runAll } from './test-runner.js';
+        runAll();
+    </script>
+</body>
+</html>
